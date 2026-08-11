@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 type Customer = { username: string; password: string; name: string; tier: keyof typeof multipliers; address: string };
-type Product = { id: number; code: string; category: string; name: string; zh: string; spec: string; pack: string; base: number; tone: string };
+type Product = { id: number; code: string; category: string; name: string; zh: string; spec: string; pack: string; base: number; tone: string; image: string };
 
 const multipliers = { gold: 0.86, silver: 0.92, standard: 1 };
 const customers: Customer[] = [
@@ -13,16 +13,16 @@ const customers: Customer[] = [
 ];
 
 const products: Product[] = [
-  { id: 1, code: "TD-BR40", category: "Ống mềm inox", name: "Dây cấp inox 304", zh: "304不鏽鋼編織軟管", spec: "F1/2 × F1/2 · 40 cm", pack: "100 sợi / thùng", base: 32000, tone: "#dce9ef" },
-  { id: 2, code: "TD-BR60", category: "Ống mềm inox", name: "Dây cấp inox 304", zh: "304不鏽鋼編織軟管", spec: "F1/2 × F1/2 · 60 cm", pack: "100 sợi / thùng", base: 38000, tone: "#e1e9ee" },
-  { id: 3, code: "TD-VN40", category: "Dây vòi nước", name: "Dây vòi rửa chén", zh: "廚房龍頭管", spec: "M10 × F1/2 · 40 cm", pack: "100 sợi / thùng", base: 35500, tone: "#e9e2d9" },
-  { id: 4, code: "TD-SH150", category: "Dây sen", name: "Dây sen chống xoắn", zh: "防纏繞花灑管", spec: "1.5 m · lõi EPDM", pack: "50 sợi / thùng", base: 92000, tone: "#dce7ec" },
-  { id: 5, code: "TD-BD120", category: "Vòi xịt", name: "Bộ vòi xịt vệ sinh", zh: "沖洗器組", spec: "ABS mạ chrome · 1.2 m", pack: "40 bộ / thùng", base: 118000, tone: "#e9e4da" },
-  { id: 6, code: "TD-PD27", category: "Phao bồn nước", name: "Phao cơ inox 27", zh: "不鏽鋼水塔浮球", spec: "Ren 27 · bóng inox 140", pack: "20 bộ / thùng", base: 185000, tone: "#dce9e8" },
-  { id: 7, code: "TD-PD34", category: "Phao bồn nước", name: "Phao cơ đồng 34", zh: "銅製水塔浮球", spec: "Ren 34 · bóng inox 168", pack: "12 bộ / thùng", base: 268000, tone: "#e8e1d3" },
-  { id: 8, code: "TD-GH20", category: "Ống tưới vườn", name: "Ống tưới vườn PVC", zh: "PVC花園管", spec: "Ø 20 mm · cuộn 20 m", pack: "5 cuộn / kiện", base: 295000, tone: "#dce9df" },
-  { id: 9, code: "TD-CN12", category: "Phụ kiện", name: "Đầu nối nhanh 1/2\"", zh: "1/2吋快速接頭", spec: "Nhựa ABS chịu lực", pack: "100 cái / thùng", base: 24000, tone: "#e3e7eb" },
-  { id: 10, code: "TD-VG12", category: "Phụ kiện", name: "Van góc đồng 1/2\"", zh: "1/2吋銅三角凡而", spec: "Đồng mạ chrome", pack: "60 cái / thùng", base: 86000, tone: "#e9e0d4" },
+  { id: 1, code: "102XI05", category: "Ống mềm inox", name: "Dây cấp inox 304", zh: "304不鏽鋼編織軟管", spec: "F1/2 × F1/2 · 40 cm", pack: "100 sợi / thùng", base: 32000, tone: "#f4f5f5", image: "https://www.shintung-onspa.com/upload/2018/10/18/1539847068.jpg" },
+  { id: 2, code: "102XD01", category: "Ống mềm inox", name: "Dây cấp inox đai đỏ", zh: "紅標不鏽鋼編織軟管", spec: "F1/2 × F1/2 · 60 cm", pack: "100 sợi / thùng", base: 38000, tone: "#f4f5f5", image: "https://www.shintung-onspa.com/upload/2018/10/18/1539846019.jpg" },
+  { id: 3, code: "102XS01", category: "Dây vòi nước", name: "Dây vòi rửa chén", zh: "廚房龍頭管", spec: "M10 × F1/2 · 40 cm", pack: "100 sợi / thùng", base: 35500, tone: "#f4f5f5", image: "https://www.shintung-onspa.com/upload/2016/12/09/1481272647.jpg" },
+  { id: 4, code: "102XL01", category: "Dây sen", name: "Dây sen chống xoắn", zh: "防纏繞花灑管", spec: "1.5 m · lõi EPDM", pack: "50 sợi / thùng", base: 92000, tone: "#f4f5f5", image: "https://www.shintung-onspa.com/cache/fillw_737h_737/2cc328c791c56edaff2f700cd02b90cd1501661507.jpg.png" },
+  { id: 5, code: "102XS03", category: "Vòi xịt", name: "Bộ vòi xịt vệ sinh", zh: "沖洗器組", spec: "ABS mạ chrome · 1.2 m", pack: "40 bộ / thùng", base: 118000, tone: "#f4f5f5", image: "https://www.shintung-onspa.com/upload/2016/12/09/1481261489.jpg" },
+  { id: 6, code: "102XI02", category: "Phao bồn nước", name: "Phao cơ inox 27", zh: "不鏽鋼水塔浮球", spec: "Ren 27 · bóng inox 140", pack: "20 bộ / thùng", base: 185000, tone: "#f4f5f5", image: "https://www.shintung-onspa.com/upload/2016/12/09/1481264540.jpg" },
+  { id: 7, code: "102XI01", category: "Phao bồn nước", name: "Phao cơ đồng 34", zh: "銅製水塔浮球", spec: "Ren 34 · bóng inox 168", pack: "12 bộ / thùng", base: 268000, tone: "#f4f5f5", image: "https://www.shintung-onspa.com/upload/2016/12/09/1481262576.jpg" },
+  { id: 8, code: "105B10", category: "Ống tưới vườn", name: "Ống tưới vườn PVC", zh: "PVC花園管", spec: "Ø 20 mm · cuộn 20 m", pack: "5 cuộn / kiện", base: 295000, tone: "#f4f5f5", image: "https://www.shintung-onspa.com/cache/fillw_737h_737/952984cf71ccf086b44e5d391cfb0f901477662560.jpg.png" },
+  { id: 9, code: "105BPN005", category: "Phụ kiện", name: "Đầu nối nhanh 1/2\"", zh: "1/2吋快速接頭", spec: "Nhựa ABS chịu lực", pack: "100 cái / thùng", base: 24000, tone: "#f4f5f5", image: "https://www.shintung-onspa.com/upload/2016/12/09/1481266326.jpg" },
+  { id: 10, code: "105MTN001", category: "Phụ kiện", name: "Van góc đồng 1/2\"", zh: "1/2吋銅三角凡而", spec: "Đồng mạ chrome", pack: "60 cái / thùng", base: 86000, tone: "#f4f5f5", image: "https://www.shintung-onspa.com/cache/fillw_737h_737/c5bf50b6c9cf09a15a56a939d6596ade1735978152.png.png" },
 ];
 
 const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n) + " ₫";
@@ -87,7 +87,7 @@ export default function Home() {
   </main>;
 
   const ProductCard = ({ p }: { p: Product }) => <article className="productCard" onClick={() => setSelected(p)}>
-    <div className="productVisual" style={{ background: p.tone }}><span className="pipe">◯━━━◯</span><small>{p.code}</small></div>
+    <div className="productVisual" style={{ background: p.tone }}><img src={p.image} alt={lang === "vi" ? p.name : p.zh}/><small>{p.code}</small></div>
     <div className="productInfo"><span className="tag">{p.category}</span><h3>{lang === "vi" ? p.name : p.zh}</h3><p>{p.spec}</p><div className="priceRow"><b>{fmt(price(p))}</b><button onClick={e => { e.stopPropagation(); add(p.id); }} aria-label="Thêm sản phẩm">＋</button></div></div>
   </article>;
 
@@ -112,7 +112,7 @@ export default function Home() {
     </>}
 
     <nav className="bottomNav">{[["⌂","home","Trang chủ","首頁"],["▦","products","Sản phẩm","產品"],["＋","cart","Đặt hàng","訂貨"],["▶","videos","Video","影片"],["●","account","Của tôi","我的"]].map(n=><button key={n[1]} className={view===n[1]?"active":""} onClick={() => setView(n[1])}><span>{n[0]}{n[1]==="cart"&&Object.keys(cart).length>0?<i>{Object.keys(cart).length}</i>:null}</span><small>{t(n[2],n[3])}</small></button>)}</nav>
-    {selected && <div className="modalBackdrop" onClick={() => setSelected(null)}><section className="modal" onClick={e=>e.stopPropagation()}><button className="close" onClick={() => setSelected(null)}>×</button><div className="detailVisual" style={{background:selected.tone}}>◯━━━━◯</div><p className="eyebrow">{selected.code}</p><h2>{lang === "vi" ? selected.name : selected.zh}</h2><p>{selected.spec}</p><dl><div><dt>{t("Quy cách đóng gói", "包裝數量")}</dt><dd>{selected.pack}</dd></div><div><dt>{t("Giá riêng của bạn", "您的專屬價格")}</dt><dd>{fmt(price(selected))}</dd></div></dl><button className="videoLink">▶ {t("Xem video lắp đặt liên quan", "觀看相關安裝影片")}</button><button className="primary" onClick={()=>{add(selected.id);setSelected(null)}}>{t("Thêm vào đơn hàng", "加入訂單")} ＋</button></section></div>}
+    {selected && <div className="modalBackdrop" onClick={() => setSelected(null)}><section className="modal" onClick={e=>e.stopPropagation()}><button className="close" onClick={() => setSelected(null)}>×</button><div className="detailVisual" style={{background:selected.tone}}><img src={selected.image} alt={lang === "vi" ? selected.name : selected.zh}/></div><p className="eyebrow">{selected.code}</p><h2>{lang === "vi" ? selected.name : selected.zh}</h2><p>{selected.spec}</p><dl><div><dt>{t("Quy cách đóng gói", "包裝數量")}</dt><dd>{selected.pack}</dd></div><div><dt>{t("Giá riêng của bạn", "您的專屬價格")}</dt><dd>{fmt(price(selected))}</dd></div></dl><button className="videoLink">▶ {t("Xem video lắp đặt liên quan", "觀看相關安裝影片")}</button><button className="primary" onClick={()=>{add(selected.id);setSelected(null)}}>{t("Thêm vào đơn hàng", "加入訂單")} ＋</button></section></div>}
     {toast && <div className="toast">✓ {toast}</div>}
   </main>;
 }
