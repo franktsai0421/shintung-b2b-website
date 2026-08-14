@@ -35,6 +35,31 @@ type Product = {
   variants: Variant[];
   image: string;
 };
+type OrderStatus =
+  | "waiting"
+  | "confirmed"
+  | "preparing"
+  | "shipping"
+  | "completed"
+  | "cancelled";
+type OrderLine = {
+  productId: number;
+  quantity: number;
+  unitPrice: number;
+  variantId: string;
+};
+type Order = {
+  id: string;
+  username: string;
+  createdAt: string;
+  status: OrderStatus;
+  amount: number;
+  confirmedAmount?: number;
+  deliveryDate?: string;
+  adminNote?: string;
+  customerNote?: string;
+  lines: OrderLine[];
+};
 
 const tierInfo: Record<Tier, { vi: string; zh: string; code: string }> = {
   large: { vi: "Đại lý lớn", zh: "大盤客戶", code: "ĐẠI BÀN" },
@@ -65,6 +90,51 @@ const initialCustomers: Customer[] = [
     tier: "small",
     address: "19 QL1A, Bình Tân, TP.HCM",
     bestCategories: [],
+  },
+];
+const initialOrders: Order[] = [
+  {
+    id: "#TD-260812-08",
+    username: "minhphat",
+    createdAt: "12/08/2026 10:45",
+    status: "confirmed",
+    amount: 4860000,
+    confirmedAmount: 4820000,
+    deliveryDate: "18/08/2026",
+    adminNote: "Đã giữ hàng, giao buổi sáng.",
+    lines: [
+      { productId: 1, quantity: 100, unitPrice: 25600, variantId: "102XI05-0" },
+      { productId: 101, quantity: 20, unitPrice: 94400, variantId: "103S283201-0" },
+    ],
+  },
+  {
+    id: "#TD-260805-03",
+    username: "minhphat",
+    createdAt: "05/08/2026 09:20",
+    status: "completed",
+    amount: 7325000,
+    confirmedAmount: 7325000,
+    deliveryDate: "09/08/2026",
+    lines: [{ productId: 2, quantity: 150, unitPrice: 27600, variantId: "102XI05-0" }],
+  },
+  {
+    id: "#TD-260811-06",
+    username: "anphu",
+    createdAt: "11/08/2026 14:10",
+    status: "waiting",
+    amount: 2190000,
+    lines: [{ productId: 3, quantity: 50, unitPrice: 37000, variantId: "102XD01-0" }],
+  },
+  {
+    id: "#TD-260809-04",
+    username: "hoangnam",
+    createdAt: "09/08/2026 16:30",
+    status: "preparing",
+    amount: 3450000,
+    confirmedAmount: 3450000,
+    deliveryDate: "16/08/2026",
+    adminNote: "Đang đóng gói.",
+    lines: [{ productId: 201, quantity: 40, unitPrice: 86000, variantId: "104A39202-0" }],
   },
 ];
 const catalogueGroups: {
@@ -494,6 +564,7 @@ const fmt = (n: number) =>
 export default function Home() {
   const [customers, setCustomers] = useState(initialCustomers);
   const [productList, setProductList] = useState(initialProducts);
+  const [orders, setOrders] = useState(initialOrders);
   const [user, setUser] = useState<Customer | null>(null);
   const [username, setUsername] = useState("minhphat");
   const [password, setPassword] = useState("123456");
@@ -507,6 +578,7 @@ export default function Home() {
     Record<number, string>
   >({});
   const [cart, setCart] = useState<Record<number, number>>({});
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Product | null>(null);
   const [toast, setToast] = useState("");
   const t = (vi: string, zh: string) => (lang === "vi" ? vi : zh);
@@ -547,6 +619,28 @@ export default function Home() {
     (s, p) => s + price(p, p.quantity) * p.quantity,
     0,
   );
+  const userOrders = user
+    ? orders.filter((o) => o.username === user.username)
+    : [];
+  const orderStatus = (status: OrderStatus) =>
+    ({
+      waiting: t("Chờ xác nhận", "等待確認"),
+      confirmed: t("Đã xác nhận", "已確認"),
+      preparing: t("Đang chuẩn bị", "備貨中"),
+      shipping: t("Đang giao", "配送中"),
+      completed: t("Hoàn tất", "已完成"),
+      cancelled: t("Đã hủy", "已取消"),
+    })[status];
+  const loadOrderToCart = (order: Order, edit = false) => {
+    setCart(
+      Object.fromEntries(order.lines.map((line) => [line.productId, line.quantity])),
+    );
+    order.lines.forEach((line) =>
+      setVariantByProduct((v) => ({ ...v, [line.productId]: line.variantId })),
+    );
+    setEditingOrderId(edit ? order.id : null);
+    setView("cart");
+  };
   const changeQty = (id: number, n: number) =>
     setQty((q) => ({ ...q, [id]: Math.max(1, Math.floor(n || 1)) }));
   const add = (id: number, n?: number) => {
@@ -773,6 +867,8 @@ export default function Home() {
           setCustomers={setCustomers}
           products={productList}
           setProducts={setProductList}
+          orders={orders}
+          setOrders={setOrders}
           close={() => {
             setAdmin(false);
             setUser(
@@ -983,11 +1079,42 @@ export default function Home() {
               user={user}
               t={t}
               goProducts={() => setView("products")}
+              editingOrderId={editingOrderId}
               submit={() => {
+                const lines = cartItems.map((p) => ({
+                  productId: p.id,
+                  quantity: p.quantity,
+                  unitPrice: price(p, p.quantity),
+                  variantId: variant(p).id,
+                }));
+                if (editingOrderId) {
+                  setOrders((list) =>
+                    list.map((o) =>
+                      o.id === editingOrderId
+                        ? { ...o, amount: total, lines, createdAt: "14/08/2026 16:20" }
+                        : o,
+                    ),
+                  );
+                } else {
+                  setOrders((list) => [
+                    {
+                      id: `#TD-260814-${String(list.length + 9).padStart(2, "0")}`,
+                      username: user.username,
+                      createdAt: "14/08/2026 16:20",
+                      status: "waiting",
+                      amount: total,
+                      lines,
+                    },
+                    ...list,
+                  ]);
+                }
                 setCart({});
+                setEditingOrderId(null);
                 setView("account");
                 setToast(
-                  t("Đã gửi đơn · Chờ xác nhận", "訂單已送出・等待確認"),
+                  editingOrderId
+                    ? t("Đã cập nhật đơn hàng", "訂單已更新")
+                    : t("Đã gửi đơn · Chờ xác nhận", "訂單已送出・等待確認"),
                 );
               }}
             />
@@ -1035,24 +1162,51 @@ export default function Home() {
               </div>
               <div className="accountGrid">
                 <section>
-                  <h2>{t("Đơn hàng gần đây", "最近訂單")}</h2>
-                  <div className="order">
+                  <div className="orderSectionHead">
                     <div>
-                      <b>#TD-260812-08</b>
-                      <small>12/08/2026</small>
+                      <p className="eyebrow">{t("THEO DÕI ĐƠN HÀNG", "訂單追蹤")}</p>
+                      <h2>{t("Trạng thái & lịch sử", "訂單狀態與歷史紀錄")}</h2>
                     </div>
-                    <span className="pending">
-                      {t("Chờ xác nhận", "等待確認")}
-                    </span>
-                    <strong>4.860.000 ₫</strong>
-                    <button
-                      onClick={() => {
-                        add(1, 100);
-                        setView("cart");
-                      }}
-                    >
-                      ↻ {t("Đặt lại", "再次訂購")}
-                    </button>
+                    <span>{userOrders.length} {t("đơn", "筆訂單")}</span>
+                  </div>
+                  <div className="orderFlow">
+                    <span className="done">✓ {t("Đã gửi", "已送出")}</span><i>→</i>
+                    <span>{t("Tân Đông xác nhận", "新東確認")}</span><i>→</i>
+                    <span>{t("Chuẩn bị hàng", "備貨")}</span><i>→</i>
+                    <span>{t("Giao hàng", "配送")}</span>
+                  </div>
+                  <div className="orderHistory">
+                    {userOrders.map((o) => (
+                      <details className="orderCard" key={o.id}>
+                        <summary>
+                          <div><b>{o.id}</b><small>{o.createdAt}</small></div>
+                          <span className={`orderStatus ${o.status}`}>{orderStatus(o.status)}</span>
+                          <div className="deliverySummary"><small>{t("Dự kiến giao", "預計交貨")}</small><b>{o.deliveryDate || t("Chờ xác nhận", "等待確認")}</b></div>
+                          <strong>{fmt(o.confirmedAmount || o.amount)}</strong>
+                          <i>⌄</i>
+                        </summary>
+                        <div className="orderDetail">
+                          <div className="orderLines">
+                            {o.lines.map((line) => {
+                              const p = productList.find((x) => x.id === line.productId);
+                              if (!p) return null;
+                              const v = p.variants.find((x) => x.id === line.variantId) || p.variants[0];
+                              return <div key={`${o.id}-${line.productId}`}><img src={p.image} alt=""/><span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · {line.quantity} pcs</small></span><strong>{fmt(line.unitPrice * line.quantity)}</strong></div>;
+                            })}
+                          </div>
+                          <dl>
+                            <div><dt>{t("Tổng tạm tính", "送出暫估金額")}</dt><dd>{fmt(o.amount)}</dd></div>
+                            <div><dt>{t("Số tiền xác nhận", "確認金額")}</dt><dd>{o.confirmedAmount ? fmt(o.confirmedAmount) : "—"}</dd></div>
+                            <div><dt>{t("Ngày giao dự kiến", "預計交貨日")}</dt><dd>{o.deliveryDate || "—"}</dd></div>
+                            {o.adminNote && <div><dt>{t("Phản hồi Tân Đông", "新東回覆")}</dt><dd>{o.adminNote}</dd></div>}
+                          </dl>
+                          <div className="orderActions">
+                            {o.status === "waiting" && <button className="editOrder" onClick={() => loadOrderToCart(o,true)}>✎ {t("Sửa đơn trước khi xác nhận", "確認前修改訂單")}</button>}
+                            <button onClick={() => loadOrderToCart(o)}>↻ {t("Đặt lại đơn này", "再次購買此訂單")}</button>
+                          </div>
+                        </div>
+                      </details>
+                    ))}
                   </div>
                 </section>
                 <aside>
@@ -1140,6 +1294,7 @@ function Cart({
   user,
   t,
   goProducts,
+  editingOrderId,
   submit,
 }: {
   items: (Product & { quantity: number })[];
@@ -1153,13 +1308,14 @@ function Cart({
   user: Customer;
   t: (a: string, b: string) => string;
   goProducts: () => void;
+  editingOrderId: string | null;
   submit: () => void;
 }) {
   return (
     <div className="page narrow">
       <div className="pageTitle">
-        <p className="eyebrow">{t("ĐƠN HÀNG MỚI", "新訂單")}</p>
-        <h1>{t("Kiểm tra đơn hàng", "確認訂單")}</h1>
+        <p className="eyebrow">{editingOrderId || t("ĐƠN HÀNG MỚI", "新訂單")}</p>
+        <h1>{editingOrderId ? t("Sửa đơn đang chờ xác nhận", "修改等待確認中的訂單") : t("Kiểm tra đơn hàng", "確認訂單")}</h1>
       </div>
       {items.length ? (
         <>
@@ -1222,7 +1378,9 @@ function Cart({
               <p>{user.address}</p>
             </div>
             <button className="primary" onClick={submit}>
-              {t("Gửi đơn cho Tân Đông xác nhận", "送出訂單，等待新東確認")} →
+              {editingOrderId
+                ? t("Lưu thay đổi đơn hàng", "儲存訂單修改")
+                : t("Gửi đơn cho Tân Đông xác nhận", "送出訂單，等待新東確認")} →
             </button>
             <small>
               ⓘ{" "}
@@ -1396,6 +1554,8 @@ function Admin({
   setCustomers,
   products,
   setProducts,
+  orders,
+  setOrders,
   close,
   t,
 }: {
@@ -1403,6 +1563,8 @@ function Admin({
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  orders: Order[];
+  setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
   close: () => void;
   t: (a: string, b: string) => string;
 }) {
@@ -1411,6 +1573,7 @@ function Admin({
   const [productSearch, setProductSearch] = useState("");
   const [adminCategory, setAdminCategory] = useState("all");
   const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [openAdminOrder, setOpenAdminOrder] = useState<string | null>(null);
   const [newCustomer, setNewCustomer] = useState<Customer>({
     username: "",
     password: "123456",
@@ -1548,6 +1711,10 @@ function Admin({
             }
           : c,
       ),
+    );
+  const updateOrder = (id: string, change: Partial<Order>) =>
+    setOrders((list) =>
+      list.map((o) => (o.id === id ? { ...o, ...change } : o)),
     );
   return (
     <div className="admin">
@@ -1756,21 +1923,6 @@ function Admin({
                             }
                           />
                           <i>pcs</i>
-                        </div>
-                      </label>
-                      <label className="basePriceField">
-                        <span>{t("GIÁ NIÊM YẾT / PCS", "每件牌價")}</span>
-                        <div>
-                          <input
-                            type="number"
-                            min="0"
-                            step="1000"
-                            value={v.base}
-                            onChange={(e) =>
-                              updateBase(p.id, v.id, Number(e.target.value))
-                            }
-                          />
-                          <i>₫</i>
                         </div>
                       </label>
                     </div>
@@ -2062,35 +2214,32 @@ function Admin({
           </div>
         )}
         {tab === "orders" && (
-          <div className="adminTable">
-            <div className="tableTools">
-              <b>{t("Đơn hàng gần đây", "最近訂單")}</b>
+          <div className="adminOrders">
+            <div className="adminOrderStats">
+              <div><small>{t("CHỜ XÁC NHẬN", "等待確認")}</small><b>{orders.filter((o) => o.status === "waiting").length}</b></div>
+              <div><small>{t("ĐÃ XÁC NHẬN", "已確認")}</small><b>{orders.filter((o) => o.status === "confirmed").length}</b></div>
+              <div><small>{t("ĐANG XỬ LÝ", "處理中")}</small><b>{orders.filter((o) => ["preparing","shipping"].includes(o.status)).length}</b></div>
             </div>
-            {customers
-              .concat(customers)
-              .slice(0, 5)
-              .map((c, i) => (
-                <div className="tr" key={i}>
-                  <span>
-                    <b>#TD-260812-0{8 - i}</b>
-                    <small>
-                      {c.name} · {t(tierInfo[c.tier].vi, tierInfo[c.tier].zh)}
-                    </small>
-                  </span>
-                  <span>12/08/2026</span>
-                  <span>
-                    <i className="status">{t("Chờ xác nhận", "等待確認")}</i>
-                  </span>
-                  <span>
-                    <b>
-                      {[4860000, 7325000, 2190000, 8920000, 3450000][
-                        i
-                      ].toLocaleString("vi-VN")}{" "}
-                      ₫
-                    </b>
-                  </span>
-                </div>
-              ))}
+            <div className="adminIntro"><b>{t("Xác nhận số tiền và ngày giao để phản hồi ngay cho đại lý.","確認正式金額與交貨日期後，立即回饋給經銷商。")}</b><span>{t("Đơn đang chờ xác nhận vẫn có thể được khách hàng sửa.","等待確認中的訂單，客戶仍可自行修改。")}</span></div>
+            {orders.map((o) => {
+              const customer = customers.find((c) => c.username === o.username);
+              return <article className={`adminOrderCard ${o.status === "waiting" ? "needsAction" : ""}`} key={o.id}>
+                <header>
+                  <div><b>{o.id}</b><small>{o.createdAt} · @{o.username}</small></div>
+                  <span>{customer?.name}</span>
+                  <strong>{fmt(o.confirmedAmount || o.amount)}</strong>
+                  <button onClick={() => setOpenAdminOrder(openAdminOrder === o.id ? null : o.id)}>{openAdminOrder === o.id ? t("Thu gọn","收合") : t("Xử lý đơn","處理訂單")} →</button>
+                </header>
+                {openAdminOrder === o.id && <div className="adminOrderEditor">
+                  <label><span>{t("Trạng thái", "訂單狀態")}</span><select value={o.status} onChange={(e) => updateOrder(o.id,{status:e.target.value as OrderStatus})}><option value="waiting">{t("Chờ xác nhận","等待確認")}</option><option value="confirmed">{t("Đã xác nhận","已確認")}</option><option value="preparing">{t("Đang chuẩn bị","備貨中")}</option><option value="shipping">{t("Đang giao","配送中")}</option><option value="completed">{t("Hoàn tất","已完成")}</option><option value="cancelled">{t("Đã hủy","已取消")}</option></select></label>
+                  <label><span>{t("Số tiền chính thức", "正式確認金額")}</span><div><input type="number" value={o.confirmedAmount || o.amount} onChange={(e) => updateOrder(o.id,{confirmedAmount:Number(e.target.value)})}/><i>₫</i></div></label>
+                  <label><span>{t("Ngày giao dự kiến", "預計交貨日期")}</span><input placeholder="DD/MM/YYYY" value={o.deliveryDate || ""} onChange={(e) => updateOrder(o.id,{deliveryDate:e.target.value})}/></label>
+                  <label className="adminOrderNote"><span>{t("Phản hồi cho khách hàng", "回覆客戶備註")}</span><input placeholder={t("Ví dụ: giao buổi sáng...","例如：預計上午送達…")} value={o.adminNote || ""} onChange={(e) => updateOrder(o.id,{adminNote:e.target.value})}/></label>
+                  <div className="adminOrderLines">{o.lines.map((line) => {const p=products.find((x)=>x.id===line.productId);return p?<span key={`${o.id}-${line.productId}`}><b>{p.code}</b><small>{line.quantity} pcs · {fmt(line.unitPrice)}</small></span>:null})}</div>
+                  <button className="confirmOrder" onClick={() => updateOrder(o.id,{status:o.status === "waiting" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount})}>✓ {t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>
+                </div>}
+              </article>;
+            })}
           </div>
         )}
         <div className="adminNote">
