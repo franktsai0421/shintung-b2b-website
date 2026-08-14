@@ -47,6 +47,10 @@ type OrderLine = {
   quantity: number;
   unitPrice: number;
   variantId: string;
+  discountPercent?: number;
+  packQty?: number;
+  cartons?: number;
+  looseQty?: number;
 };
 type Order = {
   id: string;
@@ -856,6 +860,12 @@ export default function Home() {
           <button onClick={() => setAdmin(!admin)}>
             ⚙ <span>{t("Quản trị", "管理後台")}</span>
           </button>
+          {!admin && (
+            <button className="myOrdersBtn" onClick={() => setView("account")}>
+              ▤ <span>{t("Đơn hàng của tôi", "我的訂單")}</span>
+              {userOrders.some((o) => ["confirmed", "preparing", "shipping"].includes(o.status)) && <i>!</i>}
+            </button>
+          )}
           <button className="avatar" onClick={() => setView("account")}>
             {user.name.slice(0, 2)}
           </button>
@@ -1086,6 +1096,10 @@ export default function Home() {
                   quantity: p.quantity,
                   unitPrice: price(p, p.quantity),
                   variantId: variant(p).id,
+                  discountPercent: percent(p, p.quantity),
+                  packQty: variant(p).packQty,
+                  cartons: Math.floor(p.quantity / variant(p).packQty),
+                  looseQty: p.quantity % variant(p).packQty,
                 }));
                 if (editingOrderId) {
                   setOrders((list) =>
@@ -1160,6 +1174,12 @@ export default function Home() {
                   {t("Đăng xuất", "登出")}
                 </button>
               </div>
+              {userOrders.some((o) => ["confirmed","preparing","shipping"].includes(o.status)) && (
+                <div className="orderFeedbackBanner">
+                  <span>✓</span>
+                  <div><b>{t("Bạn có phản hồi mới từ Tân Đông", "您有新東的最新訂單回覆")}</b><small>{t("Mở đơn hàng bên dưới để xem ngày giao, số tiền và cách đóng thùng.", "請展開下方訂單，查看交貨日、確認金額與裝箱方式。")}</small></div>
+                </div>
+              )}
               <div className="accountGrid">
                 <section>
                   <div className="orderSectionHead">
@@ -1191,7 +1211,10 @@ export default function Home() {
                               const p = productList.find((x) => x.id === line.productId);
                               if (!p) return null;
                               const v = p.variants.find((x) => x.id === line.variantId) || p.variants[0];
-                              return <div key={`${o.id}-${line.productId}`}><img src={p.image} alt=""/><span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · {line.quantity} pcs</small></span><strong>{fmt(line.unitPrice * line.quantity)}</strong></div>;
+                              const packQty = line.packQty || v.packQty;
+                              const cartons = line.cartons ?? Math.floor(line.quantity / packQty);
+                              const loose = line.looseQty ?? line.quantity % packQty;
+                              return <div key={`${o.id}-${line.productId}`}><img src={p.image} alt=""/><span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · {line.quantity} pcs · {line.discountPercent || Math.round((line.unitPrice/v.base)*100)}%</small><em>{cartons} {t("thùng","箱")} {loose > 0 ? `＋ ${loose} pcs ${t("lẻ","散裝")}` : `· ${t("đủ thùng","整箱")}`}</em></span><strong>{fmt(line.unitPrice * line.quantity)}</strong></div>;
                             })}
                           </div>
                           <dl>
@@ -1227,6 +1250,26 @@ export default function Home() {
             </div>
           )}
         </>
+      )}
+      {!admin && cartItems.length > 0 && view !== "cart" && (
+        <aside className="miniCart">
+          <header>
+            <div><b>{t("Đơn đang chọn", "目前已選訂單")}</b><small>{cartItems.length} {t("sản phẩm", "項產品")}</small></div>
+            <strong>{fmt(total)}</strong>
+          </header>
+          <div className="miniCartLines">
+            {cartItems.slice(0, 3).map((p) => (
+              <div key={p.id}>
+                <img src={p.image} alt="" />
+                <span><b>{p.code}</b><small>{fmt(price(p,p.quantity))} ×</small></span>
+                <input aria-label={p.code} type="number" min="1" value={p.quantity} onChange={(e) => setCart((c) => ({...c,[p.id]:Math.max(1,Number(e.target.value))}))}/>
+                <button aria-label={t("Xóa", "移除")} onClick={() => setCart((c) => {const next={...c};delete next[p.id];return next})}>×</button>
+              </div>
+            ))}
+            {cartItems.length > 3 && <small className="moreItems">＋{cartItems.length - 3} {t("sản phẩm khác", "項其他產品")}</small>}
+          </div>
+          <button className="miniCheckout" onClick={() => setView("cart")}>{t("Kiểm tra & gửi đơn", "查看並送出訂單")} →</button>
+        </aside>
       )}
       <nav className="bottomNav">
         {[
@@ -1715,6 +1758,23 @@ function Admin({
   const updateOrder = (id: string, change: Partial<Order>) =>
     setOrders((list) =>
       list.map((o) => (o.id === id ? { ...o, ...change } : o)),
+    );
+  const updateOrderLine = (
+    orderId: string,
+    productId: number,
+    change: Partial<OrderLine>,
+  ) =>
+    setOrders((list) =>
+      list.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              lines: o.lines.map((line) =>
+                line.productId === productId ? { ...line, ...change } : line,
+              ),
+            }
+          : o,
+      ),
     );
   return (
     <div className="admin">
@@ -2235,7 +2295,29 @@ function Admin({
                   <label><span>{t("Số tiền chính thức", "正式確認金額")}</span><div><input type="number" value={o.confirmedAmount || o.amount} onChange={(e) => updateOrder(o.id,{confirmedAmount:Number(e.target.value)})}/><i>₫</i></div></label>
                   <label><span>{t("Ngày giao dự kiến", "預計交貨日期")}</span><input placeholder="DD/MM/YYYY" value={o.deliveryDate || ""} onChange={(e) => updateOrder(o.id,{deliveryDate:e.target.value})}/></label>
                   <label className="adminOrderNote"><span>{t("Phản hồi cho khách hàng", "回覆客戶備註")}</span><input placeholder={t("Ví dụ: giao buổi sáng...","例如：預計上午送達…")} value={o.adminNote || ""} onChange={(e) => updateOrder(o.id,{adminNote:e.target.value})}/></label>
-                  <div className="adminOrderLines">{o.lines.map((line) => {const p=products.find((x)=>x.id===line.productId);return p?<span key={`${o.id}-${line.productId}`}><b>{p.code}</b><small>{line.quantity} pcs · {fmt(line.unitPrice)}</small></span>:null})}</div>
+                  <div className="adminOrderLines">
+                    <div className="packingHeader"><span>{t("Sản phẩm","產品")}</span><span>{t("SL đặt","訂購量")}</span><span>{t("Đơn giá","單價")}</span><span>{t("Chiết khấu","折扣")}</span><span>{t("Đóng thùng","裝箱方式")}</span></div>
+                    {o.lines.map((line) => {
+                      const p=products.find((x)=>x.id===line.productId);
+                      if(!p)return null;
+                      const v=p.variants.find((x)=>x.id===line.variantId)||p.variants[0];
+                      const packQty=line.packQty||v.packQty;
+                      const cartons=line.cartons??Math.floor(line.quantity/packQty);
+                      const loose=line.looseQty??line.quantity%packQty;
+                      const discount=line.discountPercent||Math.round((line.unitPrice/v.base)*100);
+                      return <div className="packingRow" key={`${o.id}-${line.productId}`}>
+                        <span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · 1 {t("thùng","箱")}={packQty} pcs</small></span>
+                        <strong>{line.quantity} pcs</strong>
+                        <span><b>{fmt(line.unitPrice)}</b><small>{t("Tạm tính","小計")} {fmt(line.unitPrice*line.quantity)}</small></span>
+                        <strong className="discountValue">{discount}%</strong>
+                        <div className="packingControls">
+                          <label><small>{t("Số thùng","箱數")}</small><input type="number" min="0" value={cartons} onChange={(e)=>updateOrderLine(o.id,line.productId,{cartons:Math.max(0,Number(e.target.value))})}/></label>
+                          <label><small>{t("Pcs lẻ","散裝件")}</small><input type="number" min="0" value={loose} onChange={(e)=>updateOrderLine(o.id,line.productId,{looseQty:Math.max(0,Number(e.target.value))})}/></label>
+                          <em className={loose>0||line.quantity<packQty?"packingWarning":"packingOk"}>{line.quantity<packQty?t("Chưa đủ 1 thùng","不足一箱"):loose>0?t("Có hàng lẻ","含散裝"):t("Đủ thùng","整箱")}</em>
+                        </div>
+                      </div>;
+                    })}
+                  </div>
                   <button className="confirmOrder" onClick={() => updateOrder(o.id,{status:o.status === "waiting" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount})}>✓ {t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>
                 </div>}
               </article>;
