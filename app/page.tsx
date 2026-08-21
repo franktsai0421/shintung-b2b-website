@@ -66,6 +66,15 @@ type Order = {
 };
 
 const DEMO_PASSWORD = ["123", "456"].join("");
+const ADMIN_USERNAME = "admin";
+const adminViewer: Customer = {
+  username: ADMIN_USERNAME,
+  password: DEMO_PASSWORD,
+  name: "Tân Đông Admin",
+  tier: "large",
+  address: "Tân Đông Vietnam",
+  bestCategories: [],
+};
 
 const tierInfo: Record<Tier, { vi: string; zh: string; code: string }> = {
   large: { vi: "Đại lý lớn", zh: "大盤客戶", code: "ĐẠI BÀN" },
@@ -603,8 +612,10 @@ export default function Home() {
     () => storedAdminData.orders || initialOrders,
   );
   const [user, setUser] = useState<Customer | null>(null);
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const [username, setUsername] = useState("minhphat");
   const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [loginError, setLoginError] = useState("");
   const [lang, setLang] = useState<"vi" | "zh">("vi");
   const [view, setView] = useState("home");
   const [admin, setAdmin] = useState(false);
@@ -634,6 +645,12 @@ export default function Home() {
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 1600);
+  };
+  const logout = () => {
+    setUser(null);
+    setAdmin(false);
+    setIsAdminUser(false);
+    setView("home");
   };
   const variant = (p: Product) =>
     p.variants.find((v) => v.id === variantByProduct[p.id]) || p.variants[0];
@@ -735,10 +752,35 @@ export default function Home() {
             className="loginCard"
             onSubmit={(e) => {
               e.preventDefault();
+              const normalizedUsername = username.trim().toLowerCase();
+              if (
+                normalizedUsername === ADMIN_USERNAME &&
+                password === DEMO_PASSWORD
+              ) {
+                setUser(adminViewer);
+                setIsAdminUser(true);
+                setAdmin(true);
+                setLoginError("");
+                return;
+              }
               const c = customers.find(
-                (x) => x.username === username && x.password === password,
+                (x) =>
+                  x.username.toLowerCase() === normalizedUsername &&
+                  x.password === password,
               );
-              if (c) setUser(c);
+              if (c) {
+                setUser(c);
+                setIsAdminUser(false);
+                setAdmin(false);
+                setLoginError("");
+              } else {
+                setLoginError(
+                  t(
+                    "Tên đăng nhập hoặc mật khẩu không đúng",
+                    "帳號或密碼不正確",
+                  ),
+                );
+              }
             }}
           >
             <div className="miniLogo">
@@ -752,6 +794,7 @@ export default function Home() {
                 "登入查看您的專屬價格與數量折扣",
               )}
             </p>
+            {loginError && <div className="error">{loginError}</div>}
             <label>
               {t("Tên đăng nhập", "使用者名稱")}
               <input
@@ -776,15 +819,19 @@ export default function Home() {
                 <button
                   type="button"
                   key={c.username}
-                  onClick={() => setUsername(c.username)}
+                  onClick={() => {
+                    setUsername(c.username);
+                    setPassword(DEMO_PASSWORD);
+                    setLoginError("");
+                  }}
                 >
                   {c.username}
                 </button>
               ))}
               <small>
                 {t(
-                  "Mật khẩu demo đã được cấu hình · Ba cấp giá",
-                  "示範密碼已設定・三種客戶等級",
+                  "Mật khẩu tài khoản khách hàng: 123456",
+                  "客戶帳號密碼：123456",
                 )}
               </small>
             </div>
@@ -906,9 +953,14 @@ export default function Home() {
           <button onClick={() => setLang(lang === "vi" ? "zh" : "vi")}>
             {lang === "vi" ? "中文" : "VI"}
           </button>
-          <button onClick={() => setAdmin(!admin)}>
-            ⚙ <span>{t("Quản trị", "管理後台")}</span>
-          </button>
+          {isAdminUser && (
+            <button
+              aria-label={t("Mở trang quản trị", "進入管理後台")}
+              onClick={() => setAdmin(!admin)}
+            >
+              ⚙ <span>{t("Quản trị", "管理後台")}</span>
+            </button>
+          )}
           {!admin && (
             <button className="myOrdersBtn" onClick={() => setView("account")}>
               ▤ <span>{t("Đơn hàng của tôi", "我的訂單")}</span>
@@ -939,6 +991,22 @@ export default function Home() {
         />
       ) : (
         <>
+          {isAdminUser && (
+            <div className="adminPreviewBanner">
+              <span>
+                <b>{t("Chế độ xem trước của Admin", "Admin 前台預覽模式")}</b>
+                <small>
+                  {t(
+                    "Bạn đang xem giao diện đặt hàng phía trước.",
+                    "目前正在查看客戶訂貨前台。",
+                  )}
+                </small>
+              </span>
+              <button onClick={() => setAdmin(true)}>
+                {t("Vào trang quản trị", "返回管理後台")} →
+              </button>
+            </div>
+          )}
           {view === "home" && (
             <div className="page homePage">
               <section className="welcome">
@@ -1220,7 +1288,7 @@ export default function Home() {
                     {user.username} · {tierLabel}
                   </span>
                 </div>
-                <button onClick={() => setUser(null)}>
+                <button onClick={logout}>
                   {t("Đăng xuất", "登出")}
                 </button>
               </div>
@@ -1849,7 +1917,7 @@ function Admin({
           </button>
         ))}
         <button className="back" onClick={close}>
-          ← {t("Về trang đại lý", "返回經銷商頁")}
+          ← {t("Xem trang đại lý", "查看訂貨前台")}
         </button>
       </aside>
       <nav
@@ -1870,7 +1938,7 @@ function Admin({
       </nav>
       <section className="adminMain">
         <button className="adminMobileBack" onClick={close}>
-          ← {t("Về trang đại lý", "返回經銷商頁")}
+          ← {t("Xem trang đại lý", "查看訂貨前台")}
         </button>
         <div className="adminHead">
           <div>
