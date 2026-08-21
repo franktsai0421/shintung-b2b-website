@@ -1273,7 +1273,7 @@ export default function Home() {
           <button className="miniCheckout" onClick={() => setView("cart")}>{t("Kiểm tra & gửi đơn", "查看並送出訂單")} →</button>
         </aside>
       )}
-      <nav className="bottomNav">
+      {!admin && <nav className="bottomNav">
         {[
           ["⌂", "home", "Trang chủ", "首頁"],
           ["▦", "products", "Sản phẩm", "產品"],
@@ -1298,7 +1298,7 @@ export default function Home() {
             <small>{t(n[2], n[3])}</small>
           </button>
         ))}
-      </nav>
+      </nav>}
       {selected && (
         <ProductModal
           p={selected}
@@ -1802,7 +1802,26 @@ function Admin({
           ← {t("Về trang đại lý", "返回經銷商頁")}
         </button>
       </aside>
+      <nav
+        className="adminMobileNav"
+        aria-label={t("Menu quản trị", "後台管理選單")}
+      >
+        {nav.map((x) => (
+          <button
+            className={tab === x[1] ? "active" : ""}
+            aria-current={tab === x[1] ? "page" : undefined}
+            onClick={() => setTab(x[1])}
+            key={x[1]}
+          >
+            <span>{x[0]}</span>
+            <small>{x[2]}</small>
+          </button>
+        ))}
+      </nav>
       <section className="adminMain">
+        <button className="adminMobileBack" onClick={close}>
+          ← {t("Về trang đại lý", "返回經銷商頁")}
+        </button>
         <div className="adminHead">
           <div>
             <p>TÂN ĐÔNG PRO</p>
@@ -1810,6 +1829,7 @@ function Admin({
           </div>
           {(tab === "discounts" || tab === "tiers") && (
             <button
+              className="adminSaveButton"
               onClick={() => {
                 setSaved(true);
                 setTimeout(() => setSaved(false), 1600);
@@ -1821,7 +1841,10 @@ function Admin({
             </button>
           )}
           {tab === "customers" && (
-            <button onClick={() => setShowNewCustomer(true)}>
+            <button
+              className="adminAddButton"
+              onClick={() => setShowNewCustomer(true)}
+            >
               ＋ {t("Thêm username", "新增Username")}
             </button>
           )}
