@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Tier = "large" | "medium" | "small";
 type PriceStage = { minQty: number; percent: number };
@@ -567,10 +567,41 @@ const initialProducts: Product[] = catalogueGroups.flatMap(
 const fmt = (n: number) =>
   new Intl.NumberFormat("vi-VN").format(Math.round(n / 100) * 100) + " ₫";
 
+const ADMIN_STORAGE_KEY = "tan-dong-pro-admin-v1";
+
+type StoredAdminData = {
+  customers?: Customer[];
+  products?: Product[];
+  orders?: Order[];
+};
+
+const loadStoredAdminData = (): StoredAdminData => {
+  if (typeof window === "undefined") return {};
+  try {
+    const saved = window.localStorage.getItem(ADMIN_STORAGE_KEY);
+    if (!saved) return {};
+    const data = JSON.parse(saved) as StoredAdminData;
+    return {
+      customers: Array.isArray(data.customers) ? data.customers : undefined,
+      products: Array.isArray(data.products) ? data.products : undefined,
+      orders: Array.isArray(data.orders) ? data.orders : undefined,
+    };
+  } catch {
+    return {};
+  }
+};
+
 export default function Home() {
-  const [customers, setCustomers] = useState(initialCustomers);
-  const [productList, setProductList] = useState(initialProducts);
-  const [orders, setOrders] = useState(initialOrders);
+  const [storedAdminData] = useState(loadStoredAdminData);
+  const [customers, setCustomers] = useState(
+    () => storedAdminData.customers || initialCustomers,
+  );
+  const [productList, setProductList] = useState(
+    () => storedAdminData.products || initialProducts,
+  );
+  const [orders, setOrders] = useState(
+    () => storedAdminData.orders || initialOrders,
+  );
   const [user, setUser] = useState<Customer | null>(null);
   const [username, setUsername] = useState("minhphat");
   const [password, setPassword] = useState(DEMO_PASSWORD);
@@ -588,6 +619,22 @@ export default function Home() {
   const [selected, setSelected] = useState<Product | null>(null);
   const [toast, setToast] = useState("");
   const t = (vi: string, zh: string) => (lang === "vi" ? vi : zh);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        ADMIN_STORAGE_KEY,
+        JSON.stringify({ customers, products: productList, orders }),
+      );
+    } catch {
+      // The interface remains usable if browser storage is blocked or full.
+    }
+  }, [customers, productList, orders]);
+
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 1600);
+  };
   const variant = (p: Product) =>
     p.variants.find((v) => v.id === variantByProduct[p.id]) || p.variants[0];
   const packQtyFor = (p: Product) => variant(p).packQty;
@@ -881,6 +928,7 @@ export default function Home() {
           setProducts={setProductList}
           orders={orders}
           setOrders={setOrders}
+          onSaved={showToast}
           close={() => {
             setAdmin(false);
             setUser(
@@ -1601,6 +1649,7 @@ function Admin({
   setProducts,
   orders,
   setOrders,
+  onSaved,
   close,
   t,
 }: {
@@ -1610,6 +1659,7 @@ function Admin({
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   orders: Order[];
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
+  onSaved: (message: string) => void;
   close: () => void;
   t: (a: string, b: string) => string;
 }) {
@@ -1832,6 +1882,7 @@ function Admin({
               className="adminSaveButton"
               onClick={() => {
                 setSaved(true);
+                onSaved(t("Đã lưu trên thiết bị này", "已儲存於此裝置"));
                 setTimeout(() => setSaved(false), 1600);
               }}
             >
@@ -1888,31 +1939,6 @@ function Admin({
                     <small>{t(tierInfo[c.tier].vi, tierInfo[c.tier].zh)}</small>
                   </div>
                 </div>
-                <label className="allBest">
-                  <input
-                    type="checkbox"
-                    checked={c.tier === "large"}
-                    disabled
-                  />
-                  <span>
-                    <b>
-                      {c.tier === "large"
-                        ? t(
-                            "Mặc định tất cả danh mục dùng giá thấp nhất",
-                            "大盤預設全部類別最低價",
-                          )
-                        : t("Cấp quyền theo username", "依Username個別授權")}
-                    </b>
-                    <small>
-                      {c.tier === "large"
-                        ? t("Không cần chọn từng danh mục", "不需逐一選擇類別")
-                        : t(
-                            "Chỉ danh mục được chọn mới bỏ qua số lượng",
-                            "只有勾選類別會跳過數量階梯",
-                          )}
-                    </small>
-                  </span>
-                </label>
                 <div
                   className={
                     c.tier === "large"
@@ -2343,7 +2369,11 @@ function Admin({
                       </div>;
                     })}
                   </div>
-                  <button className="confirmOrder" onClick={() => updateOrder(o.id,{status:o.status === "waiting" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount})}>✓ {t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>
+                  <button className="confirmOrder" onClick={() => {
+                    updateOrder(o.id,{status:o.status === "waiting" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount});
+                    setOpenAdminOrder(null);
+                    onSaved(t("Đã lưu & phản hồi đại lý", "已儲存並回饋經銷商"));
+                  }}>✓ {t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>
                 </div>}
               </article>;
             })}
@@ -2352,8 +2382,8 @@ function Admin({
         <div className="adminNote">
           ⓘ{" "}
           {t(
-            "Bản mẫu quản trị — dữ liệu mô phỏng, chưa kết nối ERP.",
-            "管理後台原型——目前為模擬資料，尚未連接ERP。",
+            "Dữ liệu được lưu trên trình duyệt của thiết bị này; chưa đồng bộ ERP hoặc thiết bị khác.",
+            "資料會儲存在此裝置的瀏覽器；尚未同步ERP或其他裝置。",
           )}
         </div>
       </section>
