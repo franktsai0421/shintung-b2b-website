@@ -1472,7 +1472,6 @@ export default function Home() {
           pc={percent(selected, projectedCategoryQty(selected, qty[selected.id] || 1))}
           unit={price(selected, projectedCategoryQty(selected, qty[selected.id] || 1))}
           categoryQty={projectedCategoryQty(selected, qty[selected.id] || 1)}
-          existingCategoryQty={cartCategoryQty(selected.categoryEn)}
           stages={categoryStages[selected.categoryEn]}
           best={hasBestPrice(selected)}
           tier={tierLabel}
@@ -1642,7 +1641,6 @@ function ProductModal({
   pc,
   unit,
   categoryQty,
-  existingCategoryQty,
   stages,
   best,
   tier,
@@ -1660,7 +1658,6 @@ function ProductModal({
   pc: number;
   unit: number;
   categoryQty: number;
-  existingCategoryQty: number;
   stages: PriceStage[];
   best: boolean;
   tier: string;
@@ -1723,12 +1720,13 @@ function ProductModal({
             return <small>{t(`Thêm ${next.minQty - categoryQty} pcs cùng nhóm để đạt chiết khấu ${100 - next.percent}%`, `同類別再加 ${next.minQty - categoryQty} pcs，可達 ${100 - next.percent}% 折扣`)}</small>;
           })()}
         </div>
+        <small className="ladderHint">{t("Chạm một mức để điền nhanh số lượng của sản phẩm này; chiết khấu nhóm vẫn tự tính theo tổng.", "點選階段可快速填入目前商品數量；類別折扣仍依合計自動重算。")}</small>
         <div className="priceLadder">
           {stages.map((s, i) => (
             <button
               key={i}
               className={pc === s.percent ? "active" : ""}
-              onClick={() => setN(Math.max(1, s.minQty - existingCategoryQty))}
+              onClick={() => setN(s.minQty)}
             >
               <small>
                 {i === 0
@@ -1765,7 +1763,7 @@ function ProductModal({
             <button onClick={() => setN(packQty)}>
               {t("1 thùng", "1箱")} ({packQty})
             </button>
-            <button onClick={() => setN(Math.max(1, stages[3].minQty - existingCategoryQty))}>
+            <button onClick={() => setN(stages[3].minQty)}>
               {t("Giá thấp nhất", "最低價")} ({stages[3].minQty}
               )
             </button>
