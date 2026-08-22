@@ -73,3 +73,4 @@
 /* Keep the order action reachable in short browser and mobile viewports. */
 .priceModal{box-sizing:border-box;max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}.priceModal>.primary{position:sticky;bottom:0;z-index:6;min-height:48px;margin-top:10px;box-shadow:0 -10px 20px #fff,0 8px 18px #08274430}.priceModal>.close{z-index:7}
 @media(max-width:850px){.modalBackdrop{padding:8px}.priceModal{max-height:calc(100dvh - 16px);padding-bottom:max(12px,env(safe-area-inset-bottom))}.priceModal>.primary{bottom:max(0px,env(safe-area-inset-bottom))}}
+.orderStatus.delivery_failed{background:#f5e8e8;color:#994141}

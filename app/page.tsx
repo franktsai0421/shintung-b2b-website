@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 type Tier = "large" | "medium" | "small";
-type UserRole = "dealer" | "warehouse" | "delivery";
+type UserRole = "dealer" | "admin" | "warehouse" | "delivery";
 type PriceStage = { minQty: number; percent: number };
 type ProductSpecification = { vi: string; zh: string };
 type Customer = {
@@ -51,6 +51,7 @@ type OrderStatus =
   | "preparing"
   | "shipping"
   | "completed"
+  | "delivery_failed"
   | "cancelled";
 type OrderLine = {
   productId: number;
@@ -118,6 +119,15 @@ const initialCustomers: Customer[] = [
     email: "hoangnam@example.vn",
     contact1: "Chị Nam · 0908 119 119",
     bestCategories: [],
+  },
+  {
+    username: "manager1",
+    password: DEMO_PASSWORD,
+    name: "Tân Đông Admin",
+    tier: "small",
+    address: "Tân Đông",
+    bestCategories: [],
+    role: "admin",
   },
   {
     username: "warehouse1",
@@ -686,9 +696,10 @@ export default function Home() {
     ({
       waiting: t("Chờ xác nhận", "等待確認"),
       confirmed: t("Đã xác nhận", "已確認"),
-      preparing: t("Đang chuẩn bị", "備貨中"),
-      shipping: t("Đang giao", "配送中"),
-      completed: t("Hoàn tất", "已完成"),
+      preparing: t("Chuẩn bị hàng", "備貨"),
+      shipping: t("Phân phối", "配貨"),
+      completed: t("Đã giao", "已交貨"),
+      delivery_failed: t("Giao thất bại", "交貨失敗"),
       cancelled: t("Đã hủy", "已取消"),
     })[status];
   const loadOrderToCart = (order: Order, edit = false) => {
@@ -716,7 +727,10 @@ export default function Home() {
     setPassword(account.password);
     setUser(account);
     setAdmin(
-      openAdmin || account.role === "warehouse" || account.role === "delivery",
+      openAdmin ||
+        account.role === "admin" ||
+        account.role === "warehouse" ||
+        account.role === "delivery",
     );
   };
 
@@ -757,7 +771,11 @@ export default function Home() {
               );
               if (c) {
                 setUser(c);
-                setAdmin(c.role === "warehouse" || c.role === "delivery");
+                setAdmin(
+                  c.role === "admin" ||
+                    c.role === "warehouse" ||
+                    c.role === "delivery",
+                );
               }
             }}
           >
@@ -771,7 +789,7 @@ export default function Home() {
                 <button type="button" onClick={() => quickEnter("minhphat")}><span>◆</span><strong>{t("Đại lý lớn", "大盤")}</strong></button>
                 <button type="button" onClick={() => quickEnter("anphu")}><span>◇</span><strong>{t("Đại lý vừa", "中盤")}</strong></button>
                 <button type="button" onClick={() => quickEnter("hoangnam")}><span>○</span><strong>{t("Cửa hàng", "小盤")}</strong></button>
-                <button type="button" onClick={() => quickEnter("minhphat", true)}><span>⚙</span><strong>{t("Quản trị", "管理者")}</strong></button>
+                <button type="button" onClick={() => quickEnter("manager1")}><span>⚙</span><strong>{t("Quản trị", "管理者")}</strong></button>
                 <button type="button" onClick={() => quickEnter("warehouse1")}><span>▦</span><strong>{t("Kho hàng", "倉庫")}</strong></button>
                 <button type="button" onClick={() => quickEnter("deliver1")}><span>➜</span><strong>{t("Giao hàng", "交貨人員")}</strong></button>
               </div>
@@ -941,7 +959,7 @@ export default function Home() {
           <button onClick={() => setLang(lang === "vi" ? "zh" : "vi")}>
             {lang === "vi" ? "中文" : "VI"}
           </button>
-          {(!user.role || user.role === "dealer") && (
+          {user.role === "admin" && (
             <button onClick={() => setAdmin(!admin)}>
               ⚙ <span>{t("Quản trị", "管理後台")}</span>
             </button>
@@ -1284,7 +1302,7 @@ export default function Home() {
                     <span className="done">✓ {t("Đã gửi", "已送出")}</span><i>→</i>
                     <span>{t("Tân Đông xác nhận", "新東確認")}</span><i>→</i>
                     <span>{t("Chuẩn bị hàng", "備貨")}</span><i>→</i>
-                    <span>{t("Giao hàng", "配送")}</span>
+                    <span>{t("Phân phối", "配貨")}</span>
                   </div>
                   <div className="orderHistory">
                     {userOrders.map((o) => (
@@ -1729,7 +1747,7 @@ function Admin({
   logout: () => void;
   t: (a: string, b: string) => string;
 }) {
-  const [tab, setTab] = useState(role === "dealer" ? "discounts" : "orders");
+  const [tab, setTab] = useState(role === "admin" ? "discounts" : "orders");
   const [saved, setSaved] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [adminCategory, setAdminCategory] = useState("all");
@@ -1749,7 +1767,7 @@ function Admin({
     ["♟", "tiers", t("Quyền theo username", "Username最低價")],
     ["％", "discounts", t("Bậc giá quy cách", "規格數量折扣")],
     ["▦", "products", t("Sản phẩm", "產品管理")],
-  ].filter((x) => role === "dealer" || x[1] === "orders");
+  ].filter((x) => role === "admin" || x[1] === "orders");
   const dealerCustomers = customers.filter(
     (customer) => !customer.role || customer.role === "dealer",
   );
@@ -1935,22 +1953,33 @@ function Admin({
     ({
       waiting: t("Chờ xác nhận", "等待確認"),
       confirmed: t("Đã xác nhận", "已確認"),
-      preparing: t("Đang chuẩn bị", "備貨中"),
-      shipping: t("Đang giao", "配送中"),
-      completed: t("Hoàn tất", "已完成"),
+      preparing: t("Chuẩn bị hàng", "備貨"),
+      shipping: t("Phân phối", "配貨"),
+      completed: t("Đã giao", "已交貨"),
+      delivery_failed: t("Giao thất bại", "交貨失敗"),
       cancelled: t("Đã hủy", "已取消"),
     })[status];
   const stageNumber = (status: OrderStatus) =>
-    ({ waiting: 0, confirmed: 1, preparing: 2, shipping: 3, completed: 4, cancelled: 0 })[status];
-  const roleStatuses: OrderStatus[] =
-    role === "warehouse"
-      ? ["waiting", "confirmed", "preparing", "shipping"]
-      : role === "delivery"
-        ? ["shipping", "completed"]
-        : ["waiting", "confirmed", "preparing", "shipping", "completed", "cancelled"];
+    ({ waiting: 0, confirmed: 1, preparing: 2, shipping: 3, completed: 4, delivery_failed: 4, cancelled: 0 })[status];
+  const statusOptionsFor = (status: OrderStatus): OrderStatus[] => {
+    if (role === "warehouse") {
+      if (status === "confirmed") return ["confirmed", "preparing", "shipping"];
+      if (status === "preparing") return ["preparing", "shipping"];
+      return [status];
+    }
+    if (role === "delivery") {
+      if (status === "preparing" || status === "shipping") {
+        return [status, "completed", "delivery_failed"];
+      }
+      return [status];
+    }
+    return ["waiting", "confirmed", "preparing", "shipping", "completed", "delivery_failed", "cancelled"];
+  };
   const visibleOrders =
-    role === "delivery"
-      ? orders.filter((order) => ["shipping", "completed"].includes(order.status))
+    role === "warehouse"
+      ? orders.filter((order) => ["confirmed", "preparing", "shipping"].includes(order.status))
+      : role === "delivery"
+        ? orders.filter((order) => ["preparing", "shipping", "completed", "delivery_failed"].includes(order.status))
       : orders;
   const updateOrderLine = (
     orderId: string,
@@ -1986,7 +2015,7 @@ function Admin({
           </b>
         </div>
         <p>
-          {role === "dealer"
+          {role === "admin"
             ? t("QUẢN LÝ HỆ THỐNG", "系統管理")
             : t("XỬ LÝ ĐƠN HÀNG", "訂單作業")}
         </p>
@@ -2000,8 +2029,8 @@ function Admin({
             {x[2]}
           </button>
         ))}
-        <button className="back" onClick={role === "dealer" ? close : logout}>
-          ← {role === "dealer"
+        <button className="back" onClick={role === "admin" ? close : logout}>
+          ← {role === "admin"
             ? t("Về trang đại lý", "返回經銷商頁")
             : t("Đăng xuất", "登出")}
         </button>
@@ -2526,11 +2555,21 @@ function Admin({
         {tab === "orders" && (
           <div className="adminOrders">
             <div className="adminOrderStats">
-              <div><small>{t("CHỜ XÁC NHẬN", "等待確認")}</small><b>{orders.filter((o) => o.status === "waiting").length}</b></div>
-              <div><small>{t("ĐÃ XÁC NHẬN", "已確認")}</small><b>{orders.filter((o) => o.status === "confirmed").length}</b></div>
-              <div><small>{t("ĐANG XỬ LÝ", "處理中")}</small><b>{orders.filter((o) => ["preparing","shipping"].includes(o.status)).length}</b></div>
+              {role === "delivery" ? <>
+                <div><small>{t("CHỜ GIAO", "待交貨")}</small><b>{orders.filter((o) => ["preparing","shipping"].includes(o.status)).length}</b></div>
+                <div><small>{t("ĐÃ GIAO", "已交貨")}</small><b>{orders.filter((o) => o.status === "completed").length}</b></div>
+                <div><small>{t("GIAO THẤT BẠI", "交貨失敗")}</small><b>{orders.filter((o) => o.status === "delivery_failed").length}</b></div>
+              </> : role === "warehouse" ? <>
+                <div><small>{t("ĐÃ XÁC NHẬN", "已確認")}</small><b>{orders.filter((o) => o.status === "confirmed").length}</b></div>
+                <div><small>{t("CHUẨN BỊ HÀNG", "備貨")}</small><b>{orders.filter((o) => o.status === "preparing").length}</b></div>
+                <div><small>{t("PHÂN PHỐI", "配貨")}</small><b>{orders.filter((o) => o.status === "shipping").length}</b></div>
+              </> : <>
+                <div><small>{t("CHỜ XÁC NHẬN", "等待確認")}</small><b>{orders.filter((o) => o.status === "waiting").length}</b></div>
+                <div><small>{t("ĐÃ XÁC NHẬN", "已確認")}</small><b>{orders.filter((o) => o.status === "confirmed").length}</b></div>
+                <div><small>{t("ĐANG XỬ LÝ", "處理中")}</small><b>{orders.filter((o) => ["preparing","shipping"].includes(o.status)).length}</b></div>
+              </>}
             </div>
-            <div className="adminIntro"><b>{t("Xác nhận số tiền và ngày giao để phản hồi ngay cho đại lý.","確認正式金額與交貨日期後，立即回饋給經銷商。")}</b><span>{t("Đơn đang chờ xác nhận vẫn có thể được khách hàng sửa.","等待確認中的訂單，客戶仍可自行修改。")}</span></div>
+            <div className="adminIntro"><b>{role === "warehouse" ? t("Chỉ hiển thị đơn đã xác nhận để chuẩn bị và phân phối.","僅顯示已確認訂單，可選擇備貨或配貨。") : role === "delivery" ? t("Chỉ xác nhận đã giao hoặc giao thất bại cho đơn đang xử lý.","備貨或配貨中的訂單，可回報已交貨或交貨失敗。") : t("Xác nhận số tiền và ngày giao để phản hồi ngay cho đại lý.","確認正式金額與交貨日期後，立即回饋給經銷商。")}</b><span>{role === "admin" ? t("Đơn đang chờ xác nhận vẫn có thể được khách hàng sửa.","等待確認中的訂單，客戶仍可自行修改。") : t("Trạng thái được cập nhật ngay cho người liên quan.","狀態會即時更新給相關人員。")}</span></div>
             {visibleOrders.map((o) => {
               const customer = customers.find((c) => c.username === o.username);
               return <article className={`adminOrderCard ${o.status === "waiting" ? "needsAction" : ""}`} key={o.id}>
@@ -2545,10 +2584,10 @@ function Admin({
                   <button onClick={() => setOpenAdminOrder(openAdminOrder === o.id ? null : o.id)}>{openAdminOrder === o.id ? t("Thu gọn","收合") : t("Xử lý đơn","處理訂單")} →</button>
                 </header>
                 {openAdminOrder === o.id && <div className="adminOrderEditor">
-                  <label><span>{t("Trạng thái", "訂單狀態")}</span><select value={o.status} onChange={(e) => updateOrder(o.id,{status:e.target.value as OrderStatus})}>{[...new Set([o.status, ...roleStatuses])].map((status) => <option value={status} key={status}>{statusLabel(status)}</option>)}</select></label>
-                  <label><span>{t("Số tiền chính thức", "正式確認金額")}</span><div><input disabled={role === "delivery"} type="number" value={o.confirmedAmount || o.amount} onChange={(e) => updateOrder(o.id,{confirmedAmount:Number(e.target.value)})}/><i>₫</i></div></label>
-                  <label><span>{t("Ngày giao dự kiến", "預計交貨日期")}</span><input disabled={role === "delivery"} placeholder="DD/MM/YYYY" value={o.deliveryDate || ""} onChange={(e) => updateOrder(o.id,{deliveryDate:e.target.value})}/></label>
-                  <label className="adminOrderNote"><span>{t("Phản hồi cho khách hàng", "回覆客戶備註")}</span><input disabled={role === "delivery"} placeholder={t("Ví dụ: giao buổi sáng...","例如：預計上午送達…")} value={o.adminNote || ""} onChange={(e) => updateOrder(o.id,{adminNote:e.target.value})}/></label>
+                  <label><span>{t("Trạng thái", "訂單狀態")}</span><select disabled={role === "delivery" && !["preparing", "shipping"].includes(o.status)} value={o.status} onChange={(e) => updateOrder(o.id,{status:e.target.value as OrderStatus})}>{statusOptionsFor(o.status).map((status) => <option value={status} key={status}>{statusLabel(status)}</option>)}</select></label>
+                  <label><span>{t("Số tiền chính thức", "正式確認金額")}</span><div><input disabled={role !== "admin"} type="number" value={o.confirmedAmount || o.amount} onChange={(e) => updateOrder(o.id,{confirmedAmount:Number(e.target.value)})}/><i>₫</i></div></label>
+                  <label><span>{t("Ngày giao dự kiến", "預計交貨日期")}</span><input disabled={role !== "admin"} placeholder="DD/MM/YYYY" value={o.deliveryDate || ""} onChange={(e) => updateOrder(o.id,{deliveryDate:e.target.value})}/></label>
+                  <label className="adminOrderNote"><span>{t("Phản hồi cho khách hàng", "回覆客戶備註")}</span><input disabled={role !== "admin"} placeholder={t("Ví dụ: giao buổi sáng...","例如：預計上午送達…")} value={o.adminNote || ""} onChange={(e) => updateOrder(o.id,{adminNote:e.target.value})}/></label>
                   <div className="adminOrderLines">
                     <div className="packingHeader"><span>{t("Sản phẩm","產品")}</span><span>{t("SL đặt","訂購量")}</span><span>{t("Đơn giá","單價")}</span><span>{t("Chiết khấu","折扣")}</span><span>{t("Đóng thùng","裝箱方式")}</span></div>
                     {o.lines.map((line) => {
@@ -2572,7 +2611,7 @@ function Admin({
                       </div>;
                     })}
                   </div>
-                  <button className="confirmOrder" onClick={() => updateOrder(o.id,{status:o.status === "waiting" && role !== "delivery" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount})}>✓ {role === "delivery" ? t("Lưu trạng thái giao hàng", "儲存配送狀態") : t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>
+                  <button className="confirmOrder" onClick={() => updateOrder(o.id,{status:o.status === "waiting" && role === "admin" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount})}>✓ {role === "delivery" ? t("Lưu kết quả giao hàng", "儲存交貨結果") : role === "warehouse" ? t("Lưu trạng thái kho", "儲存倉庫狀態") : t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>
                 </div>}
               </article>;
             })}
