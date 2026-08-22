@@ -709,6 +709,16 @@ export default function Home() {
     setToast(t("Đã thêm vào đơn hàng", "已加入訂單"));
     setTimeout(() => setToast(""), 1500);
   };
+  const quickEnter = (targetUsername: string, openAdmin = false) => {
+    const account = customers.find((customer) => customer.username === targetUsername);
+    if (!account) return;
+    setUsername(account.username);
+    setPassword(account.password);
+    setUser(account);
+    setAdmin(
+      openAdmin || account.role === "warehouse" || account.role === "delivery",
+    );
+  };
 
   if (!user)
     return (
@@ -755,6 +765,18 @@ export default function Home() {
               <b>TÂN ĐÔNG</b>
               <small>PRO</small>
             </div>
+            <section className="roleQuickAccess">
+              <b>{t("Truy cập nhanh theo vai trò", "依身分快速進入")}</b>
+              <div>
+                <button type="button" onClick={() => quickEnter("minhphat")}><span>◆</span><strong>{t("Đại lý lớn", "大盤")}</strong></button>
+                <button type="button" onClick={() => quickEnter("anphu")}><span>◇</span><strong>{t("Đại lý vừa", "中盤")}</strong></button>
+                <button type="button" onClick={() => quickEnter("hoangnam")}><span>○</span><strong>{t("Cửa hàng", "小盤")}</strong></button>
+                <button type="button" onClick={() => quickEnter("minhphat", true)}><span>⚙</span><strong>{t("Quản trị", "管理者")}</strong></button>
+                <button type="button" onClick={() => quickEnter("warehouse1")}><span>▦</span><strong>{t("Kho hàng", "倉庫")}</strong></button>
+                <button type="button" onClick={() => quickEnter("deliver1")}><span>➜</span><strong>{t("Giao hàng", "交貨人員")}</strong></button>
+              </div>
+              <small>{t("Một chạm để vào giao diện mẫu", "點一下直接進入示範介面")}</small>
+            </section>
             <h2>{t("Chào mừng trở lại", "歡迎回來")}</h2>
             <p>
               {t(
