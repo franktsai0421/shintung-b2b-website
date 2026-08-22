@@ -1725,7 +1725,8 @@ function ProductModal({
           {stages.map((s, i) => (
             <button
               key={i}
-              className={pc === s.percent ? "active" : ""}
+              className={n === s.minQty ? "active" : ""}
+              aria-pressed={n === s.minQty}
               onClick={() => setN(s.minQty)}
             >
               <small>
