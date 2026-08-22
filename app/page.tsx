@@ -27,7 +27,6 @@ type Variant = {
   labelZh: string;
   base: number;
   packQty: number;
-  stages: PriceStage[];
 };
 type Product = {
   id: number;
@@ -602,12 +601,6 @@ const initialProducts: Product[] = catalogueGroups.flatMap(
             labelZh,
             base: start + i * [4000, 9000, 7000, 18000][groupIndex],
             packQty,
-            stages: [
-              { minQty: 1, percent: 100 },
-              { minQty: packQty, percent: 94 - i },
-              { minQty: packQty * 5, percent: 88 - i },
-              { minQty: packQty * 10, percent: 80 - i },
-            ],
           };
         }),
         image,
@@ -628,12 +621,24 @@ const initialProducts: Product[] = catalogueGroups.flatMap(
       };
     }),
 );
+const initialCategoryStages: Record<string, PriceStage[]> = Object.fromEntries(
+  catalogueGroups.map((group) => [
+    group.en,
+    [
+      { minQty: 1, percent: 100 },
+      { minQty: 100, percent: 95 },
+      { minQty: 200, percent: 90 },
+      { minQty: 500, percent: 82 },
+    ],
+  ]),
+);
 const fmt = (n: number) =>
   new Intl.NumberFormat("vi-VN").format(Math.round(n / 100) * 100) + " ₫";
 
 export default function Home() {
   const [customers, setCustomers] = useState(initialCustomers);
   const [productList, setProductList] = useState(initialProducts);
+  const [categoryStages, setCategoryStages] = useState(initialCategoryStages);
   const [orders, setOrders] = useState(initialOrders);
   const [user, setUser] = useState<Customer | null>(null);
   const [username, setUsername] = useState("minhphat");
@@ -664,13 +669,21 @@ export default function Home() {
     n: number,
     customer: Customer | null = user,
   ) => {
-    const stages = [...variant(p).stages].sort((a, b) => a.minQty - b.minQty);
+    const stages = [...categoryStages[p.categoryEn]].sort((a, b) => a.minQty - b.minQty);
     if (hasBestPrice(p, customer)) return stages[stages.length - 1];
     return stages.filter((s) => n >= s.minQty).at(-1) || stages[0];
   };
   const percent = (p: Product, n: number) => stageFor(p, n).percent;
   const price = (p: Product, n: number) =>
     (variant(p).base * percent(p, n)) / 100;
+  const cartCategoryQty = (categoryEn: string) =>
+    productList.reduce(
+      (sum, product) =>
+        product.categoryEn === categoryEn ? sum + (cart[product.id] || 0) : sum,
+      0,
+    );
+  const projectedCategoryQty = (p: Product, n: number) =>
+    cartCategoryQty(p.categoryEn) + n;
   const categories = useMemo(
     () => catalogueGroups.map((g) => [g.vi, g.zh] as [string, string]),
     [],
@@ -686,7 +699,7 @@ export default function Home() {
     .filter((p) => cart[p.id])
     .map((p) => ({ ...p, quantity: cart[p.id] }));
   const total = cartItems.reduce(
-    (s, p) => s + price(p, p.quantity) * p.quantity,
+    (s, p) => s + price(p, cartCategoryQty(p.categoryEn)) * p.quantity,
     0,
   );
   const userOrders = user
@@ -849,12 +862,13 @@ export default function Home() {
   const tierLabel = t(tierInfo[user.tier].vi, tierInfo[user.tier].zh);
   const Card = ({ p }: { p: Product }) => {
     const n = qty[p.id] || 1;
-    const pc = percent(p, n);
+    const categoryQty = projectedCategoryQty(p, n);
+    const pc = percent(p, categoryQty);
     const v = variant(p);
     const packQty = packQtyFor(p);
     const best = hasBestPrice(p);
-    const active = stageFor(p, n);
-    const next = v.stages.find((s) => s.minQty > active.minQty);
+    const active = stageFor(p, categoryQty);
+    const next = categoryStages[p.categoryEn].find((s) => s.minQty > active.minQty);
     return (
       <article className="productCard" onClick={() => setSelected(p)}>
         <div className="productVisual">
@@ -886,12 +900,12 @@ export default function Home() {
           </div>
           <div className="priceRow">
             <div>
-              <b>{fmt(price(p, n))}</b>
+              <b>{fmt(price(p, categoryQty))}</b>
               <small>
-                {pc}% ·{" "}
+                {t("Chiết khấu", "折扣")} {100 - pc}% ·{" "}
                 {best
                   ? t("giá thấp nhất theo username", "Username專屬最低價")
-                  : t("bậc giá theo quy cách", "規格數量階梯")}
+                  : t("gộp số lượng cùng nhóm", "同類別合併數量")}
               </small>
             </div>
             <button
@@ -908,9 +922,12 @@ export default function Home() {
           </div>
           {!best && next && (
             <div className="nextPrice">
-              {t("Mua thêm", "再買")} {next.minQty - n} pcs → {next.percent}%
+              {t("Cùng nhóm mua thêm", "同類別再買")} {next.minQty - categoryQty} pcs → {next.percent}%
             </div>
           )}
+          <div className="categoryQtyHint">
+            {t("Tổng nhóm sau khi thêm", "加入後類別合計")}：{categoryQty} pcs · {t("chiết khấu", "折扣")} {100 - pc}%
+          </div>
           <div className="cardQty" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => changeQty(p.id, n - 1)}>−</button>
             <input
@@ -981,6 +998,8 @@ export default function Home() {
           setCustomers={setCustomers}
           products={productList}
           setProducts={setProductList}
+          categoryStages={categoryStages}
+          setCategoryStages={setCategoryStages}
           orders={orders}
           setOrders={setOrders}
           close={() => {
@@ -1114,8 +1133,8 @@ export default function Home() {
                 <p>
                   {tierLabel} ·{" "}
                   {t(
-                    "Đóng thùng và bốn bậc giá được đặt riêng cho từng quy cách.",
-                    "每個規格分別設定裝箱數與四階段價格。",
+                    "Số lượng mọi mã và kích cỡ cùng nhóm được gộp để tính chiết khấu.",
+                    "同類別不同產品與尺寸會合併數量計算折扣。",
                   )}
                 </p>
               </div>
@@ -1147,8 +1166,13 @@ export default function Home() {
                 (() => {
                   const g = catalogueGroups.find((x) => x.vi === category);
                   if (!g) return null;
+                  const categoryProduct = productList.find((p) => p.categoryEn === g.en);
+                  if (!categoryProduct) return null;
+                  const categoryQty = cartCategoryQty(g.en);
                   const best =
                     user.tier === "large" || user.bestCategories.includes(g.en);
+                  const active = stageFor(categoryProduct, Math.max(1, categoryQty));
+                  const next = categoryStages[g.en].find((stage) => stage.minQty > active.minQty);
                   return (
                     <div className="discountNotice">
                       <b>
@@ -1164,16 +1188,17 @@ export default function Home() {
                       ) : (
                         <span>
                           {t(
-                            "Chọn quy cách để xem 4 bậc giá",
-                            "選擇規格查看四階段價格",
+                            `Tổng nhóm ${categoryQty} pcs · chiết khấu ${100 - active.percent}%`,
+                            `類別合計 ${categoryQty} pcs・目前折扣 ${100 - active.percent}%`,
                           )}
                         </span>
                       )}
                       <small>
-                        {t(
-                          "Số pcs/thùng có thể khác theo quy cách",
-                          "不同規格的每箱pcs可能不同",
-                        )}
+                        {best
+                          ? t("Áp dụng cho mọi mã và kích cỡ trong nhóm", "適用此類別全部產品與尺寸")
+                          : next
+                            ? t(`Cần thêm ${next.minQty - categoryQty} pcs cùng nhóm để đạt chiết khấu ${100 - next.percent}%`, `同類別再 ${next.minQty - categoryQty} pcs 可達 ${100 - next.percent}% 折扣`)
+                            : t("Đã đạt mức chiết khấu cao nhất của nhóm", "已達此類別最高折扣")}
                       </small>
                     </div>
                   );
@@ -1193,6 +1218,7 @@ export default function Home() {
               setCart={setCart}
               price={price}
               percent={percent}
+              categoryStages={categoryStages}
               getVariant={variant}
               lang={lang}
               user={user}
@@ -1203,9 +1229,9 @@ export default function Home() {
                 const lines = cartItems.map((p) => ({
                   productId: p.id,
                   quantity: p.quantity,
-                  unitPrice: price(p, p.quantity),
+                  unitPrice: price(p, cartCategoryQty(p.categoryEn)),
                   variantId: variant(p).id,
-                  discountPercent: percent(p, p.quantity),
+                  discountPercent: percent(p, cartCategoryQty(p.categoryEn)),
                   packQty: variant(p).packQty,
                   cartons: Math.floor(p.quantity / variant(p).packQty),
                   looseQty: p.quantity % variant(p).packQty,
@@ -1323,7 +1349,8 @@ export default function Home() {
                               const packQty = line.packQty || v.packQty;
                               const cartons = line.cartons ?? Math.floor(line.quantity / packQty);
                               const loose = line.looseQty ?? line.quantity % packQty;
-                              return <div key={`${o.id}-${line.productId}`}><img src={p.image} alt=""/><span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · {line.quantity} pcs · {line.discountPercent || Math.round((line.unitPrice/v.base)*100)}%</small><em>{cartons} {t("thùng","箱")} {loose > 0 ? `＋ ${loose} pcs ${t("lẻ","散裝")}` : `· ${t("đủ thùng","整箱")}`}</em></span><strong>{fmt(line.unitPrice * line.quantity)}</strong></div>;
+                              const pricePercent = line.discountPercent || Math.round((line.unitPrice/v.base)*100);
+                              return <div key={`${o.id}-${line.productId}`}><img src={p.image} alt=""/><span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · {line.quantity} pcs · {t("chiết khấu","折扣")} {100-pricePercent}%</small><em>{cartons} {t("thùng","箱")} {loose > 0 ? `＋ ${loose} pcs ${t("lẻ","散裝")}` : `· ${t("đủ thùng","整箱")}`}</em></span><strong>{fmt(line.unitPrice * line.quantity)}</strong></div>;
                             })}
                           </div>
                           <dl>
@@ -1377,7 +1404,7 @@ export default function Home() {
                   <span>
                     <b>{p.code}</b>
                     <small>{t(p.category, p.categoryZh)} · {t(selectedVariant.label, selectedVariant.labelZh)}</small>
-                    <small className="miniDiscount">{percent(p, p.quantity)}% · {cartons} {t("thùng", "箱")} ＋ {loose} {t("pcs lẻ", "散裝件")}</small>
+                    <small className="miniDiscount">{t("Chiết khấu", "折扣")} {100 - percent(p, cartCategoryQty(p.categoryEn))}% · {t("Tổng nhóm", "類別合計")} {cartCategoryQty(p.categoryEn)} pcs · {cartons} {t("thùng", "箱")} ＋ {loose} {t("pcs lẻ", "散裝件")}</small>
                   </span>
                   <input aria-label={p.code} type="number" min="1" value={p.quantity} onChange={(e) => setCart((c) => ({...c,[p.id]:Math.max(1,Number(e.target.value))}))}/>
                   <button aria-label={t("Xóa", "移除")} onClick={() => setCart((c) => {const next={...c};delete next[p.id];return next})}>×</button>
@@ -1425,8 +1452,11 @@ export default function Home() {
           setVariant={(id) =>
             setVariantByProduct((x) => ({ ...x, [selected.id]: id }))
           }
-          pc={percent(selected, qty[selected.id] || 1)}
-          unit={price(selected, qty[selected.id] || 1)}
+          pc={percent(selected, projectedCategoryQty(selected, qty[selected.id] || 1))}
+          unit={price(selected, projectedCategoryQty(selected, qty[selected.id] || 1))}
+          categoryQty={projectedCategoryQty(selected, qty[selected.id] || 1)}
+          existingCategoryQty={cartCategoryQty(selected.categoryEn)}
+          stages={categoryStages[selected.categoryEn]}
           best={hasBestPrice(selected)}
           tier={tierLabel}
           lang={lang}
@@ -1450,6 +1480,7 @@ function Cart({
   setCart,
   price,
   percent,
+  categoryStages,
   getVariant,
   lang,
   user,
@@ -1464,6 +1495,7 @@ function Cart({
   setCart: React.Dispatch<React.SetStateAction<Record<number, number>>>;
   price: (p: Product, n: number) => number;
   percent: (p: Product, n: number) => number;
+  categoryStages: Record<string, PriceStage[]>;
   getVariant: (p: Product) => Variant;
   lang: "vi" | "zh";
   user: Customer;
@@ -1472,6 +1504,11 @@ function Cart({
   editingOrderId: string | null;
   submit: () => void;
 }) {
+  const categoryTotalFor = (categoryEn: string) =>
+    items
+      .filter((item) => item.categoryEn === categoryEn)
+      .reduce((sum, item) => sum + item.quantity, 0);
+  const cartCategories = [...new Map(items.map((item) => [item.categoryEn, item])).values()];
   return (
     <div className="page narrow">
       <div className="pageTitle">
@@ -1481,8 +1518,21 @@ function Cart({
       {items.length ? (
         <>
           <div className="cartList">
+            <div className="cartCategoryDiscounts">
+              {cartCategories.map((categoryProduct) => {
+                const categoryQty = categoryTotalFor(categoryProduct.categoryEn);
+                const currentPercent = percent(categoryProduct, categoryQty);
+                const next = categoryStages[categoryProduct.categoryEn].find((stage) => stage.minQty > categoryQty);
+                return <div key={categoryProduct.categoryEn}>
+                  <span><b>{t(categoryProduct.category, categoryProduct.categoryZh)}</b><small>{t("Tổng số lượng cùng nhóm", "同類別合計")} {categoryQty} pcs</small></span>
+                  <strong>{t("Chiết khấu", "折扣")} {100 - currentPercent}%</strong>
+                  {next && <em>{t(`Thêm ${next.minQty - categoryQty} pcs để đạt ${100 - next.percent}%`, `再加 ${next.minQty - categoryQty} pcs 可達 ${100 - next.percent}%`)}</em>}
+                </div>;
+              })}
+            </div>
             {items.map((p) => {
               const v = getVariant(p);
+              const categoryQty = categoryTotalFor(p.categoryEn);
               return (
                 <div className="cartItem" key={p.id}>
                   <img src={p.image} alt="" />
@@ -1491,8 +1541,8 @@ function Cart({
                     <small>
                       {p.code} · {lang === "vi" ? v.label : v.labelZh} ·{" "}
                       <del>{fmt(v.base)}</del>{" "}
-                      <strong>{fmt(price(p, p.quantity))}</strong> ·{" "}
-                      {percent(p, p.quantity)}%
+                      <strong>{fmt(price(p, categoryQty))}</strong> ·{" "}
+                      {t("chiết khấu", "折扣")} {100 - percent(p, categoryQty)}%
                     </small>
                   </div>
                   <div className="stepper">
@@ -1524,7 +1574,7 @@ function Cart({
                       ＋
                     </button>
                   </div>
-                  <strong>{fmt(price(p, p.quantity) * p.quantity)}</strong>
+                  <strong>{fmt(price(p, categoryQty) * p.quantity)}</strong>
                 </div>
               );
             })}
@@ -1574,6 +1624,9 @@ function ProductModal({
   setVariant,
   pc,
   unit,
+  categoryQty,
+  existingCategoryQty,
+  stages,
   best,
   tier,
   lang,
@@ -1589,6 +1642,9 @@ function ProductModal({
   setVariant: (id: string) => void;
   pc: number;
   unit: number;
+  categoryQty: number;
+  existingCategoryQty: number;
+  stages: PriceStage[];
   best: boolean;
   tier: string;
   lang: "vi" | "zh";
@@ -1642,25 +1698,33 @@ function ProductModal({
             {!best && `${pc}%`}
           </small>
         </div>
+        <div className="modalCategoryProgress">
+          <span>{t("Tổng số lượng cùng nhóm sau khi thêm", "加入後同類別合計")}</span>
+          <b>{categoryQty} pcs · {t("chiết khấu", "折扣")} {100 - pc}%</b>
+          {!best && stages.find((stage) => stage.minQty > categoryQty) && (() => {
+            const next = stages.find((stage) => stage.minQty > categoryQty)!;
+            return <small>{t(`Thêm ${next.minQty - categoryQty} pcs cùng nhóm để đạt chiết khấu ${100 - next.percent}%`, `同類別再加 ${next.minQty - categoryQty} pcs，可達 ${100 - next.percent}% 折扣`)}</small>;
+          })()}
+        </div>
         <div className="priceLadder">
-          {selectedVariant.stages.map((s, i) => (
+          {stages.map((s, i) => (
             <button
               key={i}
               className={pc === s.percent ? "active" : ""}
-              onClick={() => setN(s.minQty)}
+              onClick={() => setN(Math.max(1, s.minQty - existingCategoryQty))}
             >
               <small>
                 {i === 0
-                  ? "1 pcs"
+                  ? t("Giá cơ bản", "基礎價格")
                   : i === 1
-                    ? t("1 thùng", "1箱")
+                    ? t("Gộp theo nhóm", "類別合併")
                     : i === 3
                       ? t("Mức thấp nhất", "最低價")
                       : t("Số lượng lớn", "大量")}
               </small>
               <b>{s.minQty} pcs</b>
               <strong>
-                {s.percent}% · {fmt((selectedVariant.base * s.percent) / 100)}
+                {t("Giảm", "折扣")} {100 - s.percent}% · {fmt((selectedVariant.base * s.percent) / 100)}
               </strong>
             </button>
           ))}
@@ -1684,8 +1748,8 @@ function ProductModal({
             <button onClick={() => setN(packQty)}>
               {t("1 thùng", "1箱")} ({packQty})
             </button>
-            <button onClick={() => setN(selectedVariant.stages[3].minQty)}>
-              {t("Giá thấp nhất", "最低價")} ({selectedVariant.stages[3].minQty}
+            <button onClick={() => setN(Math.max(1, stages[3].minQty - existingCategoryQty))}>
+              {t("Giá thấp nhất", "最低價")} ({stages[3].minQty}
               )
             </button>
           </div>
@@ -1700,7 +1764,7 @@ function ProductModal({
           </div>
           <div>
             <dt>{t("Chiết khấu hiện tại", "目前折扣")}</dt>
-            <dd>{pc}% · {fmt(unit)} / pcs</dd>
+            <dd>{100 - pc}% · {fmt(unit)} / pcs</dd>
           </div>
           <div>
             <dt>{t("Thành tiền", "總額")}</dt>
@@ -1729,6 +1793,8 @@ function Admin({
   setCustomers,
   products,
   setProducts,
+  categoryStages,
+  setCategoryStages,
   orders,
   setOrders,
   close,
@@ -1740,6 +1806,8 @@ function Admin({
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  categoryStages: Record<string, PriceStage[]>;
+  setCategoryStages: React.Dispatch<React.SetStateAction<Record<string, PriceStage[]>>>;
   orders: Order[];
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
   close: () => void;
@@ -1765,7 +1833,7 @@ function Admin({
     ["▤", "orders", t("Đơn hàng", "訂單管理")],
     ["●", "customers", t("Khách hàng", "客戶管理")],
     ["♟", "tiers", t("Quyền theo username", "Username最低價")],
-    ["％", "discounts", t("Bậc giá quy cách", "規格數量折扣")],
+    ["％", "discounts", t("Chiết khấu theo nhóm", "類別數量折扣")],
     ["▦", "products", t("Sản phẩm", "產品管理")],
   ].filter((x) => role === "admin" || x[1] === "orders");
   const dealerCustomers = customers.filter(
@@ -1776,8 +1844,8 @@ function Admin({
     customers: t("Phân loại khách hàng", "客戶分類管理"),
     tiers: t("Quyền giá thấp nhất theo username", "Username個別最低價權限"),
     discounts: t(
-      "Bốn bậc giá theo sản phẩm + quy cách",
-      "產品＋規格四階段折扣",
+      "Bốn bậc chiết khấu theo tổng số lượng nhóm",
+      "類別合併數量四階段折扣",
     ),
     products: t("Danh mục & bảng giá", "分類與產品牌價"),
   };
@@ -1851,21 +1919,17 @@ function Admin({
       return {
         ...v,
         packQty,
-        stages: v.stages.map((s, i) =>
-          i === 1 ? { ...s, minQty: packQty } : s,
-        ),
       };
     });
-  const updateStage = (
-    productId: number,
-    variantId: string,
+  const updateCategoryStage = (
+    categoryEn: string,
     index: number,
     key: keyof PriceStage,
     value: number,
   ) =>
-    updateVariant(productId, variantId, (v) => ({
-      ...v,
-      stages: v.stages.map((s, i) =>
+    setCategoryStages((current) => ({
+      ...current,
+      [categoryEn]: current[categoryEn].map((s, i) =>
         i === index
           ? {
               ...s,
@@ -2068,8 +2132,8 @@ function Admin({
                     "大盤商預設全部最低價；中盤與小盤依每個Username個別勾選最低價產品類別。",
                   )
                 : t(
-                    "Mỗi sản phẩm + quy cách có số pcs/thùng và bốn bậc giá riêng.",
-                    "每個產品＋規格各自設定箱入數與四個數量價格階段。",
+                    "Mỗi nhóm sản phẩm dùng chung bốn bậc; mọi mã và kích cỡ được cộng dồn số lượng.",
+                    "每個產品類別共用四階門檻，所有產品與尺寸合併累計數量。",
                   )}
             </b>
             <span>
@@ -2161,136 +2225,56 @@ function Admin({
         )}
         {tab === "discounts" && (
           <div className="specDiscountStack">
-            {adminProductTools}
             <div className="adminTable">
               <div className="tableTools">
                 <div>
                   <b>
                     {t(
-                      "Tìm mã sản phẩm để đặt bậc giá",
-                      "搜尋產品編號設定規格折扣",
+                      "Cài đặt bốn bậc theo tổng số lượng nhóm",
+                      "依類別合併總數設定四階折扣",
                     )}
                   </b>
                   <small>
                     {t(
-                      "Hiển thị đầy đủ sản phẩm theo danh mục đã chọn",
-                      "依所選分類顯示全部產品",
+                      "Mọi mã hàng và kích cỡ trong cùng nhóm dùng chung một mức chiết khấu",
+                      "同類別所有產品與尺寸共用一組折扣門檻",
                     )}
                   </small>
                 </div>
-                <input
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  placeholder={t("Mã hoặc tên sản phẩm...", "產品編號或名稱…")}
-                />
               </div>
             </div>
-            {visibleProducts.map((p) => (
-              <details className="specProduct" key={p.id}>
-                <summary>
-                  <img src={p.image} alt="" />
-                  <span>
-                    <b>{p.code}</b>
-                    <small>
-                      {t(p.category, p.categoryZh)} · {p.variants.length}{" "}
-                      {t("quy cách", "個規格")}
-                    </small>
-                  </span>
-                  <strong>{t("Mở cài đặt", "展開設定")}⌄</strong>
-                </summary>
-                {p.variants.map((v) => (
-                  <section className="specVariant" key={v.id}>
-                    <div className="specVariantHead">
-                      <div>
-                        <p>{t("QUY CÁCH", "規格")}</p>
-                        <h3>{t(v.label, v.labelZh)}</h3>
-                      </div>
-                      <label className="packQtyField">
-                        <span>{t("SỐ LƯỢNG MỖI THÙNG", "一箱有多少件")}</span>
-                        <div>
-                          <input
-                            aria-label={t("Số lượng mỗi thùng", "一箱件數")}
-                            type="number"
-                            min="1"
-                            value={v.packQty}
-                            onChange={(e) =>
-                              updatePack(p.id, v.id, Number(e.target.value))
-                            }
-                          />
-                          <i>pcs</i>
+            <div className="categoryDiscountStack">
+              {catalogueGroups.map((group, groupIndex) => (
+                <section className="categoryDiscountCard" key={group.en}>
+                  <div className="categoryDiscountTitle">
+                    <span>{groupIndex + 1}</span>
+                    <div><em>{t("NHÓM SẢN PHẨM", "產品類別")}</em><h2>{t(group.vi, group.zh)}</h2></div>
+                    <strong>{products.filter((product) => product.categoryEn === group.en).length} {t("mã hàng", "項產品")}</strong>
+                  </div>
+                  <div className="fourStages categoryFourStages">
+                    {categoryStages[group.en].map((stage, stageIndex) => (
+                      <label className={stageIndex === 3 ? "lowest" : ""} key={stageIndex}>
+                        <span>{t(`Giai đoạn ${stageIndex + 1}`, `階段 ${stageIndex + 1}`)}</span>
+                        <div className="stageInputs">
+                          <i>≥</i>
+                          <input type="number" min="1" disabled={stageIndex === 0} value={stage.minQty} aria-label={t(`Số lượng nhóm giai đoạn ${stageIndex + 1}`, `類別數量階段 ${stageIndex + 1}`)} onChange={(e) => updateCategoryStage(group.en, stageIndex, "minQty", Number(e.target.value))}/>
+                          <em>pcs</em>
+                          <input type="number" min="1" max="100" value={stage.percent} aria-label={t(`Tỷ lệ giá giai đoạn ${stageIndex + 1}`, `售價比例階段 ${stageIndex + 1}`)} onChange={(e) => updateCategoryStage(group.en, stageIndex, "percent", Number(e.target.value))}/>
+                          <em>%</em>
                         </div>
+                        <small>{t("Chiết khấu", "折扣")} {100 - stage.percent}% · {t("mọi mã cùng nhóm", "同類別全部產品")}</small>
                       </label>
-                    </div>
-                    <div className="fourStages">
-                      {v.stages.map((s, stageIndex) => (
-                        <label
-                          className={stageIndex === 3 ? "lowest" : ""}
-                          key={stageIndex}
-                        >
-                          <span>
-                            {stageIndex === 0
-                              ? t("Giai đoạn 1 · 1 pcs", "階段1・單件")
-                              : stageIndex === 1
-                                ? t("Giai đoạn 2 · 1 thùng", "階段2・一箱")
-                                : stageIndex === 2
-                                  ? t(
-                                      "Giai đoạn 3 · số lượng lớn",
-                                      "階段3・大量",
-                                    )
-                                  : t(
-                                      "Giai đoạn 4 · giá thấp nhất",
-                                      "階段4・最低價",
-                                    )}
-                          </span>
-                          <div className="stageInputs">
-                            <i>≥</i>
-                            <input
-                              type="number"
-                              min="1"
-                              disabled={stageIndex === 0}
-                              value={s.minQty}
-                              onChange={(e) =>
-                                updateStage(
-                                  p.id,
-                                  v.id,
-                                  stageIndex,
-                                  "minQty",
-                                  Number(e.target.value),
-                                )
-                              }
-                            />
-                            <em>pcs</em>
-                            <input
-                              type="number"
-                              min="1"
-                              max="100"
-                              value={s.percent}
-                              onChange={(e) =>
-                                updateStage(
-                                  p.id,
-                                  v.id,
-                                  stageIndex,
-                                  "percent",
-                                  Number(e.target.value),
-                                )
-                              }
-                            />
-                            <em>%</em>
-                          </div>
-                          <small>{fmt((v.base * s.percent) / 100)} / pcs</small>
-                        </label>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </details>
-            ))}
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
             <div className="formulaBox">
               <b>{t("Công thức duy nhất", "唯一計價公式")}</b>
               <code>
                 {t(
-                  "Giá niêm yết của quy cách × tỷ lệ của giai đoạn đang áp dụng",
-                  "該規格牌價 × 目前適用階段百分比",
+                  "Giá niêm yết của quy cách × tỷ lệ theo tổng số lượng cùng nhóm",
+                  "規格牌價 × 同類別合併總數適用的售價比例",
                 )}
               </code>
               <small>
@@ -2450,8 +2434,8 @@ function Admin({
               </b>
               <span>
                 {t(
-                  "Số pcs/thùng và bốn bậc chiết khấu đặt tại mục Bậc giá quy cách.",
-                  "箱入數與四階段折扣請到「規格數量折扣」設定。",
+                  "Số pcs/thùng đặt tại đây; bốn bậc chiết khấu đặt tại mục Chiết khấu theo nhóm.",
+                  "箱入數在此設定；四階段折扣請到「類別數量折扣」設定。",
                 )}
               </span>
             </div>
@@ -2492,8 +2476,8 @@ function Admin({
                     <div className="variantPriceRow" key={v.id}>
                       <span>
                         {t(v.label, v.labelZh)}
-                        <small>
-                          1 {t("thùng", "箱")} = {v.packQty} pcs
+                        <small className="packEdit">
+                          1 {t("thùng", "箱")} = <input aria-label={`${p.code} ${t(v.label, v.labelZh)} ${t("Số lượng mỗi thùng", "一箱件數")}`} type="number" min="1" value={v.packQty} onChange={(e) => updatePack(p.id, v.id, Number(e.target.value))}/> pcs
                         </small>
                       </span>
                       <label>
@@ -2509,7 +2493,7 @@ function Admin({
                         <i>₫</i>
                       </label>
                       <strong>
-                        {fmt((v.base * v.stages[3].percent) / 100)}
+                        {fmt((v.base * categoryStages[p.categoryEn][3].percent) / 100)}
                       </strong>
                     </div>
                   ))}
@@ -2597,7 +2581,8 @@ function Admin({
                       const packQty=line.packQty||v.packQty;
                       const cartons=line.cartons??Math.floor(line.quantity/packQty);
                       const loose=line.looseQty??line.quantity%packQty;
-                      const discount=line.discountPercent||Math.round((line.unitPrice/v.base)*100);
+                      const pricePercent=line.discountPercent||Math.round((line.unitPrice/v.base)*100);
+                      const discount=100-pricePercent;
                       return <div className="packingRow" key={`${o.id}-${line.productId}`}>
                         <span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · 1 {t("thùng","箱")}={packQty} pcs</small></span>
                         <strong>{line.quantity} pcs</strong>
