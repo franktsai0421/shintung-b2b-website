@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Tier = "large" | "medium" | "small";
 type PriceStage = { minQty: number; percent: number };
@@ -66,6 +66,15 @@ type Order = {
 };
 
 const DEMO_PASSWORD = ["123", "456"].join("");
+const ADMIN_USERNAME = "admin";
+const adminViewer: Customer = {
+  username: ADMIN_USERNAME,
+  password: DEMO_PASSWORD,
+  name: "Tân Đông Admin",
+  tier: "large",
+  address: "Tân Đông Vietnam",
+  bestCategories: [],
+};
 
 const tierInfo: Record<Tier, { vi: string; zh: string; code: string }> = {
   large: { vi: "Đại lý lớn", zh: "大盤客戶", code: "ĐẠI BÀN" },
@@ -567,13 +576,46 @@ const initialProducts: Product[] = catalogueGroups.flatMap(
 const fmt = (n: number) =>
   new Intl.NumberFormat("vi-VN").format(Math.round(n / 100) * 100) + " ₫";
 
+const ADMIN_STORAGE_KEY = "tan-dong-pro-admin-v1";
+
+type StoredAdminData = {
+  customers?: Customer[];
+  products?: Product[];
+  orders?: Order[];
+};
+
+const loadStoredAdminData = (): StoredAdminData => {
+  if (typeof window === "undefined") return {};
+  try {
+    const saved = window.localStorage.getItem(ADMIN_STORAGE_KEY);
+    if (!saved) return {};
+    const data = JSON.parse(saved) as StoredAdminData;
+    return {
+      customers: Array.isArray(data.customers) ? data.customers : undefined,
+      products: Array.isArray(data.products) ? data.products : undefined,
+      orders: Array.isArray(data.orders) ? data.orders : undefined,
+    };
+  } catch {
+    return {};
+  }
+};
+
 export default function Home() {
-  const [customers, setCustomers] = useState(initialCustomers);
-  const [productList, setProductList] = useState(initialProducts);
-  const [orders, setOrders] = useState(initialOrders);
+  const [storedAdminData] = useState(loadStoredAdminData);
+  const [customers, setCustomers] = useState(
+    () => storedAdminData.customers || initialCustomers,
+  );
+  const [productList, setProductList] = useState(
+    () => storedAdminData.products || initialProducts,
+  );
+  const [orders, setOrders] = useState(
+    () => storedAdminData.orders || initialOrders,
+  );
   const [user, setUser] = useState<Customer | null>(null);
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const [username, setUsername] = useState("minhphat");
   const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [loginError, setLoginError] = useState("");
   const [lang, setLang] = useState<"vi" | "zh">("vi");
   const [view, setView] = useState("home");
   const [admin, setAdmin] = useState(false);
@@ -588,6 +630,28 @@ export default function Home() {
   const [selected, setSelected] = useState<Product | null>(null);
   const [toast, setToast] = useState("");
   const t = (vi: string, zh: string) => (lang === "vi" ? vi : zh);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        ADMIN_STORAGE_KEY,
+        JSON.stringify({ customers, products: productList, orders }),
+      );
+    } catch {
+      // The interface remains usable if browser storage is blocked or full.
+    }
+  }, [customers, productList, orders]);
+
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 1600);
+  };
+  const logout = () => {
+    setUser(null);
+    setAdmin(false);
+    setIsAdminUser(false);
+    setView("home");
+  };
   const variant = (p: Product) =>
     p.variants.find((v) => v.id === variantByProduct[p.id]) || p.variants[0];
   const packQtyFor = (p: Product) => variant(p).packQty;
@@ -688,10 +752,35 @@ export default function Home() {
             className="loginCard"
             onSubmit={(e) => {
               e.preventDefault();
+              const normalizedUsername = username.trim().toLowerCase();
+              if (
+                normalizedUsername === ADMIN_USERNAME &&
+                password === DEMO_PASSWORD
+              ) {
+                setUser(adminViewer);
+                setIsAdminUser(true);
+                setAdmin(true);
+                setLoginError("");
+                return;
+              }
               const c = customers.find(
-                (x) => x.username === username && x.password === password,
+                (x) =>
+                  x.username.toLowerCase() === normalizedUsername &&
+                  x.password === password,
               );
-              if (c) setUser(c);
+              if (c) {
+                setUser(c);
+                setIsAdminUser(false);
+                setAdmin(false);
+                setLoginError("");
+              } else {
+                setLoginError(
+                  t(
+                    "Tên đăng nhập hoặc mật khẩu không đúng",
+                    "帳號或密碼不正確",
+                  ),
+                );
+              }
             }}
           >
             <div className="miniLogo">
@@ -705,6 +794,7 @@ export default function Home() {
                 "登入查看您的專屬價格與數量折扣",
               )}
             </p>
+            {loginError && <div className="error">{loginError}</div>}
             <label>
               {t("Tên đăng nhập", "使用者名稱")}
               <input
@@ -729,15 +819,19 @@ export default function Home() {
                 <button
                   type="button"
                   key={c.username}
-                  onClick={() => setUsername(c.username)}
+                  onClick={() => {
+                    setUsername(c.username);
+                    setPassword(DEMO_PASSWORD);
+                    setLoginError("");
+                  }}
                 >
                   {c.username}
                 </button>
               ))}
               <small>
                 {t(
-                  "Mật khẩu demo đã được cấu hình · Ba cấp giá",
-                  "示範密碼已設定・三種客戶等級",
+                  "Mật khẩu tài khoản khách hàng: 123456",
+                  "客戶帳號密碼：123456",
                 )}
               </small>
             </div>
@@ -859,9 +953,14 @@ export default function Home() {
           <button onClick={() => setLang(lang === "vi" ? "zh" : "vi")}>
             {lang === "vi" ? "中文" : "VI"}
           </button>
-          <button onClick={() => setAdmin(!admin)}>
-            ⚙ <span>{t("Quản trị", "管理後台")}</span>
-          </button>
+          {isAdminUser && (
+            <button
+              aria-label={t("Mở trang quản trị", "進入管理後台")}
+              onClick={() => setAdmin(!admin)}
+            >
+              ⚙ <span>{t("Quản trị", "管理後台")}</span>
+            </button>
+          )}
           {!admin && (
             <button className="myOrdersBtn" onClick={() => setView("account")}>
               ▤ <span>{t("Đơn hàng của tôi", "我的訂單")}</span>
@@ -881,6 +980,7 @@ export default function Home() {
           setProducts={setProductList}
           orders={orders}
           setOrders={setOrders}
+          onSaved={showToast}
           close={() => {
             setAdmin(false);
             setUser(
@@ -891,6 +991,22 @@ export default function Home() {
         />
       ) : (
         <>
+          {isAdminUser && (
+            <div className="adminPreviewBanner">
+              <span>
+                <b>{t("Chế độ xem trước của Admin", "Admin 前台預覽模式")}</b>
+                <small>
+                  {t(
+                    "Bạn đang xem giao diện đặt hàng phía trước.",
+                    "目前正在查看客戶訂貨前台。",
+                  )}
+                </small>
+              </span>
+              <button onClick={() => setAdmin(true)}>
+                {t("Vào trang quản trị", "返回管理後台")} →
+              </button>
+            </div>
+          )}
           {view === "home" && (
             <div className="page homePage">
               <section className="welcome">
@@ -1172,7 +1288,7 @@ export default function Home() {
                     {user.username} · {tierLabel}
                   </span>
                 </div>
-                <button onClick={() => setUser(null)}>
+                <button onClick={logout}>
                   {t("Đăng xuất", "登出")}
                 </button>
               </div>
@@ -1273,7 +1389,7 @@ export default function Home() {
           <button className="miniCheckout" onClick={() => setView("cart")}>{t("Kiểm tra & gửi đơn", "查看並送出訂單")} →</button>
         </aside>
       )}
-      <nav className="bottomNav">
+      {!admin && <nav className="bottomNav">
         {[
           ["⌂", "home", "Trang chủ", "首頁"],
           ["▦", "products", "Sản phẩm", "產品"],
@@ -1298,7 +1414,7 @@ export default function Home() {
             <small>{t(n[2], n[3])}</small>
           </button>
         ))}
-      </nav>
+      </nav>}
       {selected && (
         <ProductModal
           p={selected}
@@ -1601,6 +1717,7 @@ function Admin({
   setProducts,
   orders,
   setOrders,
+  onSaved,
   close,
   t,
 }: {
@@ -1610,6 +1727,7 @@ function Admin({
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   orders: Order[];
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
+  onSaved: (message: string) => void;
   close: () => void;
   t: (a: string, b: string) => string;
 }) {
@@ -1799,10 +1917,29 @@ function Admin({
           </button>
         ))}
         <button className="back" onClick={close}>
-          ← {t("Về trang đại lý", "返回經銷商頁")}
+          ← {t("Xem trang đại lý", "查看訂貨前台")}
         </button>
       </aside>
+      <nav
+        className="adminMobileNav"
+        aria-label={t("Menu quản trị", "後台管理選單")}
+      >
+        {nav.map((x) => (
+          <button
+            className={tab === x[1] ? "active" : ""}
+            aria-current={tab === x[1] ? "page" : undefined}
+            onClick={() => setTab(x[1])}
+            key={x[1]}
+          >
+            <span>{x[0]}</span>
+            <small>{x[2]}</small>
+          </button>
+        ))}
+      </nav>
       <section className="adminMain">
+        <button className="adminMobileBack" onClick={close}>
+          ← {t("Xem trang đại lý", "查看訂貨前台")}
+        </button>
         <div className="adminHead">
           <div>
             <p>TÂN ĐÔNG PRO</p>
@@ -1810,8 +1947,10 @@ function Admin({
           </div>
           {(tab === "discounts" || tab === "tiers") && (
             <button
+              className="adminSaveButton"
               onClick={() => {
                 setSaved(true);
+                onSaved(t("Đã lưu trên thiết bị này", "已儲存於此裝置"));
                 setTimeout(() => setSaved(false), 1600);
               }}
             >
@@ -1821,7 +1960,10 @@ function Admin({
             </button>
           )}
           {tab === "customers" && (
-            <button onClick={() => setShowNewCustomer(true)}>
+            <button
+              className="adminAddButton"
+              onClick={() => setShowNewCustomer(true)}
+            >
               ＋ {t("Thêm username", "新增Username")}
             </button>
           )}
@@ -1865,31 +2007,6 @@ function Admin({
                     <small>{t(tierInfo[c.tier].vi, tierInfo[c.tier].zh)}</small>
                   </div>
                 </div>
-                <label className="allBest">
-                  <input
-                    type="checkbox"
-                    checked={c.tier === "large"}
-                    disabled
-                  />
-                  <span>
-                    <b>
-                      {c.tier === "large"
-                        ? t(
-                            "Mặc định tất cả danh mục dùng giá thấp nhất",
-                            "大盤預設全部類別最低價",
-                          )
-                        : t("Cấp quyền theo username", "依Username個別授權")}
-                    </b>
-                    <small>
-                      {c.tier === "large"
-                        ? t("Không cần chọn từng danh mục", "不需逐一選擇類別")
-                        : t(
-                            "Chỉ danh mục được chọn mới bỏ qua số lượng",
-                            "只有勾選類別會跳過數量階梯",
-                          )}
-                    </small>
-                  </span>
-                </label>
                 <div
                   className={
                     c.tier === "large"
@@ -2320,7 +2437,11 @@ function Admin({
                       </div>;
                     })}
                   </div>
-                  <button className="confirmOrder" onClick={() => updateOrder(o.id,{status:o.status === "waiting" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount})}>✓ {t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>
+                  <button className="confirmOrder" onClick={() => {
+                    updateOrder(o.id,{status:o.status === "waiting" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount});
+                    setOpenAdminOrder(null);
+                    onSaved(t("Đã lưu & phản hồi đại lý", "已儲存並回饋經銷商"));
+                  }}>✓ {t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>
                 </div>}
               </article>;
             })}
@@ -2329,8 +2450,8 @@ function Admin({
         <div className="adminNote">
           ⓘ{" "}
           {t(
-            "Bản mẫu quản trị — dữ liệu mô phỏng, chưa kết nối ERP.",
-            "管理後台原型——目前為模擬資料，尚未連接ERP。",
+            "Dữ liệu được lưu trên trình duyệt của thiết bị này; chưa đồng bộ ERP hoặc thiết bị khác.",
+            "資料會儲存在此裝置的瀏覽器；尚未同步ERP或其他裝置。",
           )}
         </div>
       </section>
