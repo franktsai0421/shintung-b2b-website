@@ -978,8 +978,13 @@ export default function Home() {
             {lang === "vi" ? "中文" : "VI"}
           </button>
           {user.role === "admin" && (
-            <button onClick={() => setAdmin(!admin)}>
-              ⚙ <span>{t("Quản trị", "管理後台")}</span>
+            <button className="modeSwitchButton" onClick={() => setAdmin(!admin)}>
+              {admin ? "←" : "⚙"}{" "}
+              <span>
+                {admin
+                  ? t("Đi đến trang đặt hàng", "往前台")
+                  : t("Vào quản trị", "進入後台管理")}
+              </span>
             </button>
           )}
           {!admin && (
@@ -1034,6 +1039,22 @@ export default function Home() {
         />
       ) : (
         <>
+          {user.role === "admin" && (
+            <div className="adminFrontendBanner">
+              <span>
+                <b>{t("Chế độ xem của quản trị viên", "管理者前台預覽")}</b>
+                <small>
+                  {t(
+                    "Bạn đang xem trang đặt hàng giống như khách hàng.",
+                    "目前顯示與客戶相同的訂貨前台。",
+                  )}
+                </small>
+              </span>
+              <button onClick={() => setAdmin(true)}>
+                {t("Vào quản trị", "進入後台管理")} →
+              </button>
+            </div>
+          )}
           {view === "home" && (
             <div className="page homePage">
               <section className="welcome">
@@ -2102,6 +2123,11 @@ function Admin({
         </button>
       </aside>
       <section className="adminMain">
+        {role === "admin" && (
+          <button className="adminFrontendButton" onClick={close}>
+            ← {t("Đi đến trang đặt hàng", "往前台")}
+          </button>
+        )}
         <div className="adminHead">
           <div>
             <p>TÂN ĐÔNG PRO</p>
