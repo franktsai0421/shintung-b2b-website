@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 
 type Tier = "large" | "medium" | "small";
+type UserRole = "dealer" | "warehouse" | "delivery";
 type PriceStage = { minQty: number; percent: number };
+type ProductSpecification = { vi: string; zh: string };
 type Customer = {
   username: string;
   password: string;
@@ -11,6 +13,13 @@ type Customer = {
   tier: Tier;
   address: string;
   bestCategories: string[];
+  role?: UserRole;
+  companyPhone?: string;
+  email?: string;
+  contact1?: string;
+  contact2?: string;
+  contact3?: string;
+  note?: string;
 };
 type Variant = {
   id: string;
@@ -34,6 +43,7 @@ type Product = {
   packQty: number;
   variants: Variant[];
   image: string;
+  specifications: ProductSpecification[];
 };
 type OrderStatus =
   | "waiting"
@@ -79,6 +89,12 @@ const initialCustomers: Customer[] = [
     name: "VLXD Minh Phát",
     tier: "large",
     address: "128 Nguyễn Văn Linh, Q.7, TP.HCM",
+    companyPhone: "028 3775 1288",
+    email: "muahang@minhphat.vn",
+    contact1: "Nguyễn Minh · 0901 234 567",
+    contact2: "Trần Phát · 0902 345 678",
+    contact3: "Kho Minh Phát · 0903 456 789",
+    note: "Giao hàng giờ hành chính, gọi trước 30 phút.",
     bestCategories: [],
   },
   {
@@ -87,6 +103,9 @@ const initialCustomers: Customer[] = [
     name: "Điện Nước An Phú",
     tier: "medium",
     address: "42 Lê Văn Việt, TP. Thủ Đức",
+    companyPhone: "028 3896 2242",
+    email: "anphu@example.vn",
+    contact1: "Anh Phú · 0918 220 220",
     bestCategories: ["FLEXIBLE HOSE", "WATER LEVEL CONTROL"],
   },
   {
@@ -95,7 +114,28 @@ const initialCustomers: Customer[] = [
     name: "Cửa hàng Hoàng Nam",
     tier: "small",
     address: "19 QL1A, Bình Tân, TP.HCM",
+    companyPhone: "028 3756 9019",
+    email: "hoangnam@example.vn",
+    contact1: "Chị Nam · 0908 119 119",
     bestCategories: [],
+  },
+  {
+    username: "warehouse1",
+    password: "123455",
+    name: "Nhân viên kho 1",
+    tier: "small",
+    address: "Kho Tân Đông",
+    bestCategories: [],
+    role: "warehouse",
+  },
+  {
+    username: "deliver1",
+    password: "123456",
+    name: "Nhân viên giao hàng 1",
+    tier: "small",
+    address: "Tân Đông",
+    bestCategories: [],
+    role: "delivery",
   },
 ];
 const initialOrders: Order[] = [
@@ -561,6 +601,20 @@ const initialProducts: Product[] = catalogueGroups.flatMap(
           };
         }),
         image,
+        specifications: [
+          {
+            vi: `Vật liệu: ${groupIndex < 2 ? "Inox 304 và lõi EPDM" : "Đồng mạ chrome"}`,
+            zh: `材質：${groupIndex < 2 ? "304不鏽鋼與EPDM內管" : "鍍鉻銅"}`,
+          },
+          {
+            vi: `Kết nối: ${groupIndex === 3 ? "Ren tiêu chuẩn DN" : "Đầu nối tiêu chuẩn G1/2"}`,
+            zh: `接口：${groupIndex === 3 ? "標準DN牙規" : "標準G1/2接口"}`,
+          },
+          {
+            vi: "Ứng dụng: Hệ thống cấp nước dân dụng",
+            zh: "用途：一般民用給水系統",
+          },
+        ],
       };
     }),
 );
@@ -691,7 +745,10 @@ export default function Home() {
               const c = customers.find(
                 (x) => x.username === username && x.password === password,
               );
-              if (c) setUser(c);
+              if (c) {
+                setUser(c);
+                setAdmin(c.role === "warehouse" || c.role === "delivery");
+              }
             }}
           >
             <div className="miniLogo">
@@ -729,7 +786,10 @@ export default function Home() {
                 <button
                   type="button"
                   key={c.username}
-                  onClick={() => setUsername(c.username)}
+                  onClick={() => {
+                    setUsername(c.username);
+                    setPassword(c.password);
+                  }}
                 >
                   {c.username}
                 </button>
@@ -859,9 +919,11 @@ export default function Home() {
           <button onClick={() => setLang(lang === "vi" ? "zh" : "vi")}>
             {lang === "vi" ? "中文" : "VI"}
           </button>
-          <button onClick={() => setAdmin(!admin)}>
-            ⚙ <span>{t("Quản trị", "管理後台")}</span>
-          </button>
+          {(!user.role || user.role === "dealer") && (
+            <button onClick={() => setAdmin(!admin)}>
+              ⚙ <span>{t("Quản trị", "管理後台")}</span>
+            </button>
+          )}
           {!admin && (
             <button className="myOrdersBtn" onClick={() => setView("account")}>
               ▤ <span>{t("Đơn hàng của tôi", "我的訂單")}</span>
@@ -886,6 +948,11 @@ export default function Home() {
             setUser(
               customers.find((c) => c.username === user.username) || user,
             );
+          }}
+          role={user.role || "dealer"}
+          logout={() => {
+            setAdmin(false);
+            setUser(null);
           }}
           t={t}
         />
@@ -1260,14 +1327,23 @@ export default function Home() {
             <strong>{fmt(total)}</strong>
           </header>
           <div className="miniCartLines">
-            {cartItems.slice(0, 3).map((p) => (
-              <div key={p.id}>
-                <img src={p.image} alt="" />
-                <span><b>{p.code}</b><small>{fmt(price(p,p.quantity))} ×</small></span>
-                <input aria-label={p.code} type="number" min="1" value={p.quantity} onChange={(e) => setCart((c) => ({...c,[p.id]:Math.max(1,Number(e.target.value))}))}/>
-                <button aria-label={t("Xóa", "移除")} onClick={() => setCart((c) => {const next={...c};delete next[p.id];return next})}>×</button>
-              </div>
-            ))}
+            {cartItems.slice(0, 3).map((p) => {
+              const selectedVariant = variant(p);
+              const cartons = Math.floor(p.quantity / selectedVariant.packQty);
+              const loose = p.quantity % selectedVariant.packQty;
+              return (
+                <div key={p.id}>
+                  <img src={p.image} alt="" />
+                  <span>
+                    <b>{p.code}</b>
+                    <small>{t(p.category, p.categoryZh)} · {t(selectedVariant.label, selectedVariant.labelZh)}</small>
+                    <small className="miniDiscount">{percent(p, p.quantity)}% · {cartons} {t("thùng", "箱")} ＋ {loose} {t("pcs lẻ", "散裝件")}</small>
+                  </span>
+                  <input aria-label={p.code} type="number" min="1" value={p.quantity} onChange={(e) => setCart((c) => ({...c,[p.id]:Math.max(1,Number(e.target.value))}))}/>
+                  <button aria-label={t("Xóa", "移除")} onClick={() => setCart((c) => {const next={...c};delete next[p.id];return next})}>×</button>
+                </div>
+              );
+            })}
             {cartItems.length > 3 && <small className="moreItems">＋{cartItems.length - 3} {t("sản phẩm khác", "項其他產品")}</small>}
           </div>
           <button className="miniCheckout" onClick={() => setView("cart")}>{t("Kiểm tra & gửi đơn", "查看並送出訂單")} →</button>
@@ -1576,16 +1652,30 @@ function ProductModal({
         </div>
         <dl>
           <div>
-            <dt>{t("Quy cách đóng gói", "包裝數量")}</dt>
+            <dt>{t("Số lượng hiện tại", "目前訂購箱數與散裝")}</dt>
             <dd>
-              1 {t("thùng", "箱")} = {packQty} pcs
+              {Math.floor(n / packQty)} {t("thùng", "箱")} ＋ {n % packQty}{" "}
+              {t("pcs lẻ", "件散裝")}
             </dd>
+          </div>
+          <div>
+            <dt>{t("Chiết khấu hiện tại", "目前折扣")}</dt>
+            <dd>{pc}% · {fmt(unit)} / pcs</dd>
           </div>
           <div>
             <dt>{t("Thành tiền", "總額")}</dt>
             <dd>{fmt(unit * n)}</dd>
           </div>
         </dl>
+        <details className="productSpecifications">
+          <summary>{t("Xem thông số sản phẩm", "查看產品規格")} ＋</summary>
+          <ul>
+            {p.specifications.map((specification, index) => (
+              <li key={index}>{t(specification.vi, specification.zh)}</li>
+            ))}
+            <li>1 {t("thùng", "箱")} = {packQty} pcs</li>
+          </ul>
+        </details>
         <button className="primary" onClick={add}>
           {t("Thêm vào đơn hàng", "加入訂單")} <span>＋</span>
         </button>
@@ -1602,6 +1692,8 @@ function Admin({
   orders,
   setOrders,
   close,
+  role,
+  logout,
   t,
 }: {
   customers: Customer[];
@@ -1611,9 +1703,11 @@ function Admin({
   orders: Order[];
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
   close: () => void;
+  role: UserRole;
+  logout: () => void;
   t: (a: string, b: string) => string;
 }) {
-  const [tab, setTab] = useState("discounts");
+  const [tab, setTab] = useState(role === "dealer" ? "discounts" : "orders");
   const [saved, setSaved] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [adminCategory, setAdminCategory] = useState("all");
@@ -1633,7 +1727,10 @@ function Admin({
     ["♟", "tiers", t("Quyền theo username", "Username最低價")],
     ["％", "discounts", t("Bậc giá quy cách", "規格數量折扣")],
     ["▦", "products", t("Sản phẩm", "產品管理")],
-  ];
+  ].filter((x) => role === "dealer" || x[1] === "orders");
+  const dealerCustomers = customers.filter(
+    (customer) => !customer.role || customer.role === "dealer",
+  );
   const title: Record<string, string> = {
     orders: t("Quản lý đơn hàng", "訂單管理"),
     customers: t("Phân loại khách hàng", "客戶分類管理"),
@@ -1761,6 +1858,78 @@ function Admin({
     setOrders((list) =>
       list.map((o) => (o.id === id ? { ...o, ...change } : o)),
     );
+  const updateCustomer = (username: string, change: Partial<Customer>) =>
+    setCustomers((list) =>
+      list.map((customer) =>
+        customer.username === username ? { ...customer, ...change } : customer,
+      ),
+    );
+  const updateSpecification = (
+    productId: number,
+    index: number,
+    key: keyof ProductSpecification,
+    value: string,
+  ) =>
+    setProducts((list) =>
+      list.map((product) =>
+        product.id === productId
+          ? {
+              ...product,
+              specifications: product.specifications.map((specification, i) =>
+                i === index
+                  ? { ...specification, [key]: value }
+                  : specification,
+              ),
+            }
+          : product,
+      ),
+    );
+  const addSpecification = (productId: number) =>
+    setProducts((list) =>
+      list.map((product) =>
+        product.id === productId
+          ? {
+              ...product,
+              specifications: [
+                ...product.specifications,
+                { vi: "", zh: "" },
+              ],
+            }
+          : product,
+      ),
+    );
+  const removeSpecification = (productId: number, index: number) =>
+    setProducts((list) =>
+      list.map((product) =>
+        product.id === productId
+          ? {
+              ...product,
+              specifications: product.specifications.filter((_, i) => i !== index),
+            }
+          : product,
+      ),
+    );
+  const statusLabel = (status: OrderStatus) =>
+    ({
+      waiting: t("Chờ xác nhận", "等待確認"),
+      confirmed: t("Đã xác nhận", "已確認"),
+      preparing: t("Đang chuẩn bị", "備貨中"),
+      shipping: t("Đang giao", "配送中"),
+      completed: t("Hoàn tất", "已完成"),
+      cancelled: t("Đã hủy", "已取消"),
+    })[status];
+  const stageNumber = (status: OrderStatus) =>
+    ({ waiting: 0, confirmed: 1, preparing: 2, shipping: 3, completed: 4, cancelled: 0 })[status];
+  const roleStatuses: OrderStatus[] =
+    role === "warehouse"
+      ? ["waiting", "confirmed", "preparing", "shipping"]
+      : role === "delivery"
+        ? ["shipping", "completed"]
+        : ["waiting", "confirmed", "preparing", "shipping", "completed", "cancelled"];
+  const visibleOrders =
+    role === "delivery"
+      ? orders.filter((order) => ["shipping", "completed"].includes(order.status))
+      : orders;
   const updateOrderLine = (
     orderId: string,
     productId: number,
@@ -1784,10 +1953,21 @@ function Admin({
         <div className="logo">
           <span>TĐ</span>
           <b>
-            TÂN ĐÔNG<small>ADMIN</small>
+            TÂN ĐÔNG
+            <small>
+              {role === "warehouse"
+                ? "WAREHOUSE"
+                : role === "delivery"
+                  ? "DELIVERY"
+                  : "ADMIN"}
+            </small>
           </b>
         </div>
-        <p>{t("QUẢN LÝ HỆ THỐNG", "系統管理")}</p>
+        <p>
+          {role === "dealer"
+            ? t("QUẢN LÝ HỆ THỐNG", "系統管理")
+            : t("XỬ LÝ ĐƠN HÀNG", "訂單作業")}
+        </p>
         {nav.map((x) => (
           <button
             className={tab === x[1] ? "active" : ""}
@@ -1798,8 +1978,10 @@ function Admin({
             {x[2]}
           </button>
         ))}
-        <button className="back" onClick={close}>
-          ← {t("Về trang đại lý", "返回經銷商頁")}
+        <button className="back" onClick={role === "dealer" ? close : logout}>
+          ← {role === "dealer"
+            ? t("Về trang đại lý", "返回經銷商頁")
+            : t("Đăng xuất", "登出")}
         </button>
       </aside>
       <section className="adminMain">
@@ -1849,7 +2031,7 @@ function Admin({
         )}
         {tab === "tiers" && (
           <div className="userPolicyGrid">
-            {customers.map((c, i) => (
+            {dealerCustomers.map((c, i) => (
               <article className="tierPolicyCard" key={c.username}>
                 <div className="tierPolicyTitle">
                   <span
@@ -2073,7 +2255,7 @@ function Admin({
           <div className="adminTable">
             <div className="tableTools">
               <b>{t("Username & cấp khách hàng", "Username與客戶等級")}</b>
-              <span className="countPill">{customers.length} usernames</span>
+              <span className="countPill">{dealerCustomers.length} usernames</span>
             </div>
             {showNewCustomer && (
               <form
@@ -2153,24 +2335,20 @@ function Admin({
               <span>{t("CẤP HIỆN TẠI", "目前等級")}</span>
               <span>{t("QUYỀN GIÁ THẤP NHẤT", "最低價權限")}</span>
             </div>
-            {customers.map((c) => (
-              <div className="customerRow" key={c.username}>
-                <span>
-                  <b>{c.name}</b>
-                  <small>@{c.username}</small>
-                </span>
-                <select
-                  value={c.tier}
-                  onChange={(e) =>
-                    setCustomers((list) =>
-                      list.map((x) =>
-                        x.username === c.username
-                          ? { ...x, tier: e.target.value as Tier }
-                          : x,
-                      ),
-                    )
-                  }
-                >
+            {dealerCustomers.map((c) => (
+              <details className="customerRecord" key={c.username}>
+                <summary className="customerRow">
+                  <span>
+                    <b>{c.name}</b>
+                    <small>@{c.username}</small>
+                  </span>
+                  <select
+                    value={c.tier}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) =>
+                      updateCustomer(c.username, { tier: e.target.value as Tier })
+                    }
+                  >
                   <option value="large">
                     {t("Đại lý lớn / Đại bàn", "大盤客戶")}
                   </option>
@@ -2180,19 +2358,33 @@ function Admin({
                   <option value="small">
                     {t("Cửa hàng / Tiểu bàn", "小盤客戶")}
                   </option>
-                </select>
-                <button
-                  className="permissionLink"
-                  onClick={() => setTab("tiers")}
-                >
+                  </select>
+                  <button
+                    className="permissionLink"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTab("tiers");
+                    }}
+                  >
                   {c.tier === "large"
                     ? t("Tất cả danh mục", "全部類別")
                     : c.bestCategories.length
                       ? `${c.bestCategories.length} ${t("danh mục", "個類別")}`
                       : t("Chưa cấp", "尚未授權")}{" "}
                   →
-                </button>
-              </div>
+                  </button>
+                </summary>
+                <div className="customerDetailsForm">
+                  <label><span>{t("Tên công ty / khách hàng", "公司／客戶名稱")}</span><input value={c.name} onChange={(e) => updateCustomer(c.username, { name: e.target.value })} /></label>
+                  <label><span>{t("Địa chỉ công ty / giao hàng", "公司／送貨地址")}</span><input value={c.address} onChange={(e) => updateCustomer(c.username, { address: e.target.value })} /></label>
+                  <label><span>{t("Điện thoại công ty", "公司電話")}</span><input value={c.companyPhone || ""} onChange={(e) => updateCustomer(c.username, { companyPhone: e.target.value })} /></label>
+                  <label><span>Email</span><input type="email" value={c.email || ""} onChange={(e) => updateCustomer(c.username, { email: e.target.value })} /></label>
+                  <label><span>{t("Người liên hệ 1", "聯絡人 1")}</span><input value={c.contact1 || ""} onChange={(e) => updateCustomer(c.username, { contact1: e.target.value })} /></label>
+                  <label><span>{t("Người liên hệ 2", "聯絡人 2")}</span><input value={c.contact2 || ""} onChange={(e) => updateCustomer(c.username, { contact2: e.target.value })} /></label>
+                  <label><span>{t("Người liên hệ 3", "聯絡人 3")}</span><input value={c.contact3 || ""} onChange={(e) => updateCustomer(c.username, { contact3: e.target.value })} /></label>
+                  <label className="customerNoteField"><span>{t("Ghi chú", "備註")}</span><textarea value={c.note || ""} onChange={(e) => updateCustomer(c.username, { note: e.target.value })} /></label>
+                </div>
+              </details>
             ))}
           </div>
         )}
@@ -2270,6 +2462,40 @@ function Admin({
                       </strong>
                     </div>
                   ))}
+                  <section className="productSpecEditor">
+                    <header>
+                      <b>{t("Thông số hiển thị cho khách", "客戶可見產品規格")}</b>
+                      <button onClick={() => addSpecification(p.id)}>
+                        ＋ {t("Thêm thông số", "新增規格")}
+                      </button>
+                    </header>
+                    {p.specifications.map((specification, index) => (
+                      <div key={index}>
+                        <input
+                          aria-label={`VI ${index + 1}`}
+                          placeholder="Tiếng Việt"
+                          value={specification.vi}
+                          onChange={(e) =>
+                            updateSpecification(p.id, index, "vi", e.target.value)
+                          }
+                        />
+                        <input
+                          aria-label={`ZH ${index + 1}`}
+                          placeholder="繁體中文"
+                          value={specification.zh}
+                          onChange={(e) =>
+                            updateSpecification(p.id, index, "zh", e.target.value)
+                          }
+                        />
+                        <button
+                          aria-label={t("Xóa thông số", "刪除規格")}
+                          onClick={() => removeSpecification(p.id, index)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </section>
                 </div>
               ))}
             </div>
@@ -2283,20 +2509,24 @@ function Admin({
               <div><small>{t("ĐANG XỬ LÝ", "處理中")}</small><b>{orders.filter((o) => ["preparing","shipping"].includes(o.status)).length}</b></div>
             </div>
             <div className="adminIntro"><b>{t("Xác nhận số tiền và ngày giao để phản hồi ngay cho đại lý.","確認正式金額與交貨日期後，立即回饋給經銷商。")}</b><span>{t("Đơn đang chờ xác nhận vẫn có thể được khách hàng sửa.","等待確認中的訂單，客戶仍可自行修改。")}</span></div>
-            {orders.map((o) => {
+            {visibleOrders.map((o) => {
               const customer = customers.find((c) => c.username === o.username);
               return <article className={`adminOrderCard ${o.status === "waiting" ? "needsAction" : ""}`} key={o.id}>
                 <header>
                   <div><b>{o.id}</b><small>{o.createdAt} · @{o.username}</small></div>
                   <span>{customer?.name}</span>
+                  <span className={`orderStatus ${o.status}`}>
+                    {statusLabel(o.status)}
+                    {stageNumber(o.status) > 0 && <small>{t("Giai đoạn", "目前階段")} {stageNumber(o.status)}/4</small>}
+                  </span>
                   <strong>{fmt(o.confirmedAmount || o.amount)}</strong>
                   <button onClick={() => setOpenAdminOrder(openAdminOrder === o.id ? null : o.id)}>{openAdminOrder === o.id ? t("Thu gọn","收合") : t("Xử lý đơn","處理訂單")} →</button>
                 </header>
                 {openAdminOrder === o.id && <div className="adminOrderEditor">
-                  <label><span>{t("Trạng thái", "訂單狀態")}</span><select value={o.status} onChange={(e) => updateOrder(o.id,{status:e.target.value as OrderStatus})}><option value="waiting">{t("Chờ xác nhận","等待確認")}</option><option value="confirmed">{t("Đã xác nhận","已確認")}</option><option value="preparing">{t("Đang chuẩn bị","備貨中")}</option><option value="shipping">{t("Đang giao","配送中")}</option><option value="completed">{t("Hoàn tất","已完成")}</option><option value="cancelled">{t("Đã hủy","已取消")}</option></select></label>
-                  <label><span>{t("Số tiền chính thức", "正式確認金額")}</span><div><input type="number" value={o.confirmedAmount || o.amount} onChange={(e) => updateOrder(o.id,{confirmedAmount:Number(e.target.value)})}/><i>₫</i></div></label>
-                  <label><span>{t("Ngày giao dự kiến", "預計交貨日期")}</span><input placeholder="DD/MM/YYYY" value={o.deliveryDate || ""} onChange={(e) => updateOrder(o.id,{deliveryDate:e.target.value})}/></label>
-                  <label className="adminOrderNote"><span>{t("Phản hồi cho khách hàng", "回覆客戶備註")}</span><input placeholder={t("Ví dụ: giao buổi sáng...","例如：預計上午送達…")} value={o.adminNote || ""} onChange={(e) => updateOrder(o.id,{adminNote:e.target.value})}/></label>
+                  <label><span>{t("Trạng thái", "訂單狀態")}</span><select value={o.status} onChange={(e) => updateOrder(o.id,{status:e.target.value as OrderStatus})}>{[...new Set([o.status, ...roleStatuses])].map((status) => <option value={status} key={status}>{statusLabel(status)}</option>)}</select></label>
+                  <label><span>{t("Số tiền chính thức", "正式確認金額")}</span><div><input disabled={role === "delivery"} type="number" value={o.confirmedAmount || o.amount} onChange={(e) => updateOrder(o.id,{confirmedAmount:Number(e.target.value)})}/><i>₫</i></div></label>
+                  <label><span>{t("Ngày giao dự kiến", "預計交貨日期")}</span><input disabled={role === "delivery"} placeholder="DD/MM/YYYY" value={o.deliveryDate || ""} onChange={(e) => updateOrder(o.id,{deliveryDate:e.target.value})}/></label>
+                  <label className="adminOrderNote"><span>{t("Phản hồi cho khách hàng", "回覆客戶備註")}</span><input disabled={role === "delivery"} placeholder={t("Ví dụ: giao buổi sáng...","例如：預計上午送達…")} value={o.adminNote || ""} onChange={(e) => updateOrder(o.id,{adminNote:e.target.value})}/></label>
                   <div className="adminOrderLines">
                     <div className="packingHeader"><span>{t("Sản phẩm","產品")}</span><span>{t("SL đặt","訂購量")}</span><span>{t("Đơn giá","單價")}</span><span>{t("Chiết khấu","折扣")}</span><span>{t("Đóng thùng","裝箱方式")}</span></div>
                     {o.lines.map((line) => {
@@ -2313,14 +2543,14 @@ function Admin({
                         <span><b>{fmt(line.unitPrice)}</b><small>{t("Tạm tính","小計")} {fmt(line.unitPrice*line.quantity)}</small></span>
                         <strong className="discountValue">{discount}%</strong>
                         <div className="packingControls">
-                          <label><small>{t("Số thùng","箱數")}</small><input type="number" min="0" value={cartons} onChange={(e)=>updateOrderLine(o.id,line.productId,{cartons:Math.max(0,Number(e.target.value))})}/></label>
-                          <label><small>{t("Pcs lẻ","散裝件")}</small><input type="number" min="0" value={loose} onChange={(e)=>updateOrderLine(o.id,line.productId,{looseQty:Math.max(0,Number(e.target.value))})}/></label>
+                          <label><small>{t("Số thùng","箱數")}</small><input disabled={role === "delivery"} type="number" min="0" value={cartons} onChange={(e)=>updateOrderLine(o.id,line.productId,{cartons:Math.max(0,Number(e.target.value))})}/></label>
+                          <label><small>{t("Pcs lẻ","散裝件")}</small><input disabled={role === "delivery"} type="number" min="0" value={loose} onChange={(e)=>updateOrderLine(o.id,line.productId,{looseQty:Math.max(0,Number(e.target.value))})}/></label>
                           <em className={loose>0||line.quantity<packQty?"packingWarning":"packingOk"}>{line.quantity<packQty?t("Chưa đủ 1 thùng","不足一箱"):loose>0?t("Có hàng lẻ","含散裝"):t("Đủ thùng","整箱")}</em>
                         </div>
                       </div>;
                     })}
                   </div>
-                  <button className="confirmOrder" onClick={() => updateOrder(o.id,{status:o.status === "waiting" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount})}>✓ {t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>
+                  <button className="confirmOrder" onClick={() => updateOrder(o.id,{status:o.status === "waiting" && role !== "delivery" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount})}>✓ {role === "delivery" ? t("Lưu trạng thái giao hàng", "儲存配送狀態") : t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>
                 </div>}
               </article>;
             })}
