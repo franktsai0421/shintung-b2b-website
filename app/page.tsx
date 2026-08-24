@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Tier = "large" | "medium" | "small";
 type UserRole = "dealer" | "admin" | "warehouse" | "delivery";
+type AdminPermission = "orders" | "customers" | "tiers" | "discounts" | "products";
 type PriceStage = { minQty: number; percent: number };
 type ProductSpecification = { vi: string; zh: string };
 type Customer = {
@@ -20,6 +21,8 @@ type Customer = {
   contact2?: string;
   contact3?: string;
   note?: string;
+  adminPermissions?: AdminPermission[];
+  isPrimaryAdmin?: boolean;
 };
 type Variant = {
   id: string;
@@ -75,6 +78,31 @@ type Order = {
 };
 
 const DEMO_PASSWORD = ["123", "456"].join("");
+const ALL_ADMIN_PERMISSIONS: AdminPermission[] = [
+  "orders",
+  "customers",
+  "tiers",
+  "discounts",
+  "products",
+];
+const adminPermissionDefinitions: Array<{
+  key: AdminPermission;
+  icon: string;
+  vi: string;
+  zh: string;
+  descriptionVi: string;
+  descriptionZh: string;
+}> = [
+  { key: "orders", icon: "▤", vi: "Đơn hàng", zh: "訂單管理", descriptionVi: "Xác nhận, đóng gói và cập nhật trạng thái đơn", descriptionZh: "確認、裝箱與更新訂單狀態" },
+  { key: "customers", icon: "●", vi: "Khách hàng & quản trị", zh: "客戶與管理者帳戶", descriptionVi: "Quản lý khách hàng, tài khoản và quyền quản trị", descriptionZh: "管理客戶、管理者帳戶與權限" },
+  { key: "tiers", icon: "♟", vi: "Quyền theo username", zh: "Username最低價", descriptionVi: "Cấp quyền giá thấp nhất theo từng khách hàng", descriptionZh: "依客戶Username設定最低價權限" },
+  { key: "discounts", icon: "％", vi: "Chiết khấu theo nhóm", zh: "類別數量折扣", descriptionVi: "Thiết lập bốn bậc chiết khấu theo nhóm", descriptionZh: "設定產品類別四階段數量折扣" },
+  { key: "products", icon: "▦", vi: "Sản phẩm", zh: "產品管理", descriptionVi: "Quản lý sản phẩm, quy cách, giá và đóng gói", descriptionZh: "管理產品、規格、價格與箱入數" },
+];
+const permissionsFor = (account: Customer) =>
+  account.isPrimaryAdmin
+    ? ALL_ADMIN_PERMISSIONS
+    : account.adminPermissions || ALL_ADMIN_PERMISSIONS;
 
 const tierInfo: Record<Tier, { vi: string; zh: string; code: string }> = {
   large: { vi: "Đại lý lớn", zh: "大盤客戶", code: "ĐẠI BÀN" },
@@ -126,6 +154,10 @@ const initialCustomers: Customer[] = [
     address: "Tân Đông",
     bestCategories: [],
     role: "admin",
+    isPrimaryAdmin: true,
+    adminPermissions: ALL_ADMIN_PERMISSIONS,
+    email: "admin@tandong.vn",
+    companyPhone: "028 0000 0000",
   },
   {
     username: "warehouse1",
@@ -634,17 +666,63 @@ const initialCategoryStages: Record<string, PriceStage[]> = Object.fromEntries(
 const fmt = (n: number) =>
   new Intl.NumberFormat("vi-VN").format(Math.round(n / 100) * 100) + " ₫";
 
+const ADMIN_STORAGE_KEY = "tan-dong-pro-workflow-v2";
+type StoredWorkflowData = {
+  customers?: Customer[];
+  products?: Product[];
+  categoryStages?: Record<string, PriceStage[]>;
+  orders?: Order[];
+};
+const loadStoredWorkflowData = (): StoredWorkflowData => {
+  if (typeof window === "undefined") return {};
+  try {
+    const saved = window.localStorage.getItem(ADMIN_STORAGE_KEY);
+    if (!saved) return {};
+    const data = JSON.parse(saved) as StoredWorkflowData;
+    return {
+      customers: Array.isArray(data.customers)
+        ? data.customers.map((account) =>
+            account.username === "manager1" && account.role === "admin"
+              ? {
+                  ...account,
+                  isPrimaryAdmin: true,
+                  adminPermissions: ALL_ADMIN_PERMISSIONS,
+                }
+              : account.role === "admin" && !account.adminPermissions
+                ? { ...account, adminPermissions: ALL_ADMIN_PERMISSIONS }
+                : account,
+          )
+        : undefined,
+      products: Array.isArray(data.products) ? data.products : undefined,
+      categoryStages: data.categoryStages,
+      orders: Array.isArray(data.orders) ? data.orders : undefined,
+    };
+  } catch {
+    return {};
+  }
+};
+
 export default function Home() {
-  const [customers, setCustomers] = useState(initialCustomers);
-  const [productList, setProductList] = useState(initialProducts);
-  const [categoryStages, setCategoryStages] = useState(initialCategoryStages);
-  const [orders, setOrders] = useState(initialOrders);
+  const [storedWorkflowData] = useState(loadStoredWorkflowData);
+  const [customers, setCustomers] = useState(
+    () => storedWorkflowData.customers || initialCustomers,
+  );
+  const [productList, setProductList] = useState(
+    () => storedWorkflowData.products || initialProducts,
+  );
+  const [categoryStages, setCategoryStages] = useState(
+    () => storedWorkflowData.categoryStages || initialCategoryStages,
+  );
+  const [orders, setOrders] = useState(
+    () => storedWorkflowData.orders || initialOrders,
+  );
   const [user, setUser] = useState<Customer | null>(null);
   const [username, setUsername] = useState("minhphat");
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [lang, setLang] = useState<"vi" | "zh">("vi");
   const [view, setView] = useState("home");
   const [admin, setAdmin] = useState(false);
+  const [adminLandingTab, setAdminLandingTab] = useState<AdminPermission>("discounts");
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [qty, setQty] = useState<Record<number, number>>({});
@@ -655,8 +733,18 @@ export default function Home() {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Product | null>(null);
   const [toast, setToast] = useState("");
-  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
   const t = (vi: string, zh: string) => (lang === "vi" ? vi : zh);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        ADMIN_STORAGE_KEY,
+        JSON.stringify({ customers, products: productList, categoryStages, orders }),
+      );
+    } catch {
+      // The interface remains usable even when local storage is unavailable.
+    }
+  }, [customers, productList, categoryStages, orders]);
   const variant = (p: Product) =>
     p.variants.find((v) => v.id === variantByProduct[p.id]) || p.variants[0];
   const packQtyFor = (p: Product) => variant(p).packQty;
@@ -739,13 +827,26 @@ export default function Home() {
     setPassword(account.password);
     setUser(account);
     setView("home");
-    setShowRoleSwitcher(false);
+    setShowAccountMenu(false);
     setAdmin(
       openAdmin ||
         account.role === "admin" ||
         account.role === "warehouse" ||
         account.role === "delivery",
     );
+  };
+  const goToStoreProducts = () => {
+    setAdmin(false);
+    setView("products");
+    setCategory("all");
+    setSearch("");
+    setShowAccountMenu(false);
+  };
+  const logout = () => {
+    setUser(null);
+    setAdmin(false);
+    setView("home");
+    setShowAccountMenu(false);
   };
 
   if (!user)
@@ -861,6 +962,14 @@ export default function Home() {
     );
 
   const tierLabel = t(tierInfo[user.tier].vi, tierInfo[user.tier].zh);
+  const accountRoleLabel =
+    user.role === "admin"
+      ? t("Quản trị viên", "管理者")
+      : user.role === "warehouse"
+        ? t("Nhân viên kho", "倉庫人員")
+        : user.role === "delivery"
+          ? t("Nhân viên giao hàng", "交貨人員")
+          : tierLabel;
   const Card = ({ p }: { p: Product }) => {
     const n = qty[p.id] || 1;
     const categoryQty = projectedCategoryQty(p, n);
@@ -978,11 +1087,14 @@ export default function Home() {
             {lang === "vi" ? "中文" : "VI"}
           </button>
           {user.role === "admin" && (
-            <button className="modeSwitchButton" onClick={() => setAdmin(!admin)}>
+            <button
+              className="modeSwitchButton"
+              onClick={() => (admin ? goToStoreProducts() : setAdmin(true))}
+            >
               {admin ? "←" : "⚙"}{" "}
               <span>
                 {admin
-                  ? t("Đi đến trang đặt hàng", "往前台")
+                  ? t("Trang sản phẩm", "前台商品頁")
                   : t("Vào quản trị", "進入後台管理")}
               </span>
             </button>
@@ -993,24 +1105,36 @@ export default function Home() {
               {userOrders.some((o) => ["confirmed", "preparing"].includes(o.status)) && <i>!</i>}
             </button>
           )}
-          <button className="avatar" aria-label={t("Chuyển vai trò thử nghiệm", "切換測試身份")} aria-expanded={showRoleSwitcher} onClick={() => setShowRoleSwitcher((open) => !open)}>
-            {user.name.slice(0, 2)}
-          </button>
-          {showRoleSwitcher && (
-            <div className="roleSwitcher">
-              <header><b>{t("Chuyển vai trò thử nghiệm", "切換測試身份")}</b><small>{t("Dùng để kiểm tra ảnh hưởng giữa các nhân viên", "用來測試不同人員間的狀態影響")}</small></header>
-              {[
-                ["minhphat", "◆", t("Đại lý lớn", "大盤")],
-                ["anphu", "◇", t("Đại lý vừa", "中盤")],
-                ["hoangnam", "○", t("Cửa hàng", "小盤")],
-                ["manager1", "⚙", t("Quản trị", "管理者")],
-                ["warehouse1", "▦", t("Kho hàng", "倉庫")],
-                ["deliver1", "➜", t("Giao hàng", "交貨人員")],
-              ].map(([account, icon, label]) => (
-                <button className={user.username === account ? "active" : ""} key={account} onClick={() => quickEnter(account)}><i>{icon}</i><span>{label}</span>{user.username === account && <b>✓</b>}</button>
-              ))}
+          <div
+            className={`accountMenuWrap ${showAccountMenu ? "open" : ""}`}
+          >
+            <button
+              className="avatar"
+              aria-label={t("Menu tài khoản", "帳戶選單")}
+              aria-expanded={showAccountMenu}
+              onClick={() => setShowAccountMenu((open) => !open)}
+            >
+              {user.name.slice(0, 2)}
+            </button>
+            <div className="accountMenu">
+                <header>
+                  <b>{user.name}</b>
+                  <small>@{user.username}</small>
+                </header>
+                <button
+                  onClick={() => {
+                    setAdmin(false);
+                    setView("account");
+                    setShowAccountMenu(false);
+                  }}
+                >
+                  <span>●</span>{t("Thông tin tài khoản", "帳戶資訊")}
+                </button>
+                <button className="logout" onClick={logout}>
+                  <span>↪</span>{t("Đăng xuất", "登出")}
+                </button>
             </div>
-          )}
+          </div>
         </div>
       </header>
       {admin ? (
@@ -1024,16 +1148,18 @@ export default function Home() {
           setCategoryStages={setCategoryStages}
           orders={orders}
           setOrders={setOrders}
+          currentUser={user}
+          setActiveUser={setUser}
+          initialTab={adminLandingTab}
           close={() => {
-            setAdmin(false);
+            goToStoreProducts();
             setUser(
               customers.find((c) => c.username === user.username) || user,
             );
           }}
           role={user.role || "dealer"}
           logout={() => {
-            setAdmin(false);
-            setUser(null);
+            logout();
           }}
           t={t}
         />
@@ -1333,20 +1459,61 @@ export default function Home() {
             </div>
           )}
           {view === "account" && (
-            <div className="page account">
+            <div className={`page account ${user.role === "admin" ? "adminAccount" : ""}`}>
               <div className="accountHero">
                 <div className="bigAvatar">{user.name.slice(0, 2)}</div>
                 <div>
-                  <p>{t("TÀI KHOẢN ĐẠI LÝ", "經銷商帳戶")}</p>
+                  <p>
+                    {user.role === "admin"
+                      ? t("TÀI KHOẢN QUẢN TRỊ", "管理者帳戶")
+                      : t("TÀI KHOẢN ĐẠI LÝ", "經銷商帳戶")}
+                  </p>
                   <h1>{user.name}</h1>
                   <span>
-                    {user.username} · {tierLabel}
+                    {user.username} · {accountRoleLabel}
                   </span>
                 </div>
-                <button onClick={() => setUser(null)}>
+                <button onClick={logout}>
                   {t("Đăng xuất", "登出")}
                 </button>
               </div>
+              <section className="accountInformationPanel">
+                <div className="accountInformationHead">
+                  <div>
+                    <p className="eyebrow">{t("THÔNG TIN TÀI KHOẢN", "帳戶資訊")}</p>
+                    <h2>{t("Thông tin cơ bản", "基本資料")}</h2>
+                  </div>
+                  {user.role === "admin" && (
+                    <button
+                      onClick={() => {
+                        setAdminLandingTab("customers");
+                        setAdmin(true);
+                      }}
+                    >
+                      {t("Mở cài đặt quản trị", "前往後台帳戶設定")} →
+                    </button>
+                  )}
+                </div>
+                <dl>
+                  <div><dt>Username</dt><dd>{user.username}</dd></div>
+                  <div><dt>{t("Họ tên", "姓名／顯示名稱")}</dt><dd>{user.name}</dd></div>
+                  <div><dt>{t("Vai trò", "角色")}</dt><dd>{accountRoleLabel}</dd></div>
+                  <div><dt>Email</dt><dd>{user.email || "—"}</dd></div>
+                  <div><dt>{t("Điện thoại", "電話")}</dt><dd>{user.companyPhone || "—"}</dd></div>
+                  <div><dt>{t("Địa chỉ", "地址")}</dt><dd>{user.address || "—"}</dd></div>
+                </dl>
+                {user.role === "admin" && (
+                  <div className="accountPermissionSummary">
+                    <b>{t("Quyền quản trị hiện tại", "目前管理權限")}</b>
+                    <div>
+                      {permissionsFor(user).map((permission) => {
+                        const definition = adminPermissionDefinitions.find((item) => item.key === permission);
+                        return definition ? <span key={permission}>✓ {t(definition.vi, definition.zh)}</span> : null;
+                      })}
+                    </div>
+                  </div>
+                )}
+              </section>
               {userOrders.some((o) => ["confirmed","preparing"].includes(o.status)) && (
                 <div className="orderFeedbackBanner">
                   <span>✓</span>
@@ -1454,7 +1621,7 @@ export default function Home() {
           <button className="miniCheckout" onClick={() => setView("cart")}>{t("Kiểm tra & gửi đơn", "查看並送出訂單")} →</button>
         </aside>
       )}
-      <nav className="bottomNav">
+      {!admin && <nav className="bottomNav">
         {[
           ["⌂", "home", "Trang chủ", "首頁"],
           ["▦", "products", "Sản phẩm", "產品"],
@@ -1479,7 +1646,7 @@ export default function Home() {
             <small>{t(n[2], n[3])}</small>
           </button>
         ))}
-      </nav>
+      </nav>}
       {selected && (
         <ProductModal
           p={selected}
@@ -1834,6 +2001,9 @@ function Admin({
   setCategoryStages,
   orders,
   setOrders,
+  currentUser,
+  setActiveUser,
+  initialTab,
   close,
   role,
   logout,
@@ -1847,16 +2017,26 @@ function Admin({
   setCategoryStages: React.Dispatch<React.SetStateAction<Record<string, PriceStage[]>>>;
   orders: Order[];
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
+  currentUser: Customer;
+  setActiveUser: React.Dispatch<React.SetStateAction<Customer | null>>;
+  initialTab: AdminPermission;
   close: () => void;
   role: UserRole;
   logout: () => void;
   t: (a: string, b: string) => string;
 }) {
-  const [tab, setTab] = useState(role === "admin" ? "discounts" : "orders");
+  const allowedAdminPermissions: AdminPermission[] =
+    role === "admin" ? permissionsFor(currentUser) : ["orders"];
+  const [tab, setTab] = useState<AdminPermission>(
+    allowedAdminPermissions.includes(initialTab)
+      ? initialTab
+      : allowedAdminPermissions[0],
+  );
   const [saved, setSaved] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [adminCategory, setAdminCategory] = useState("all");
   const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [showNewAdmin, setShowNewAdmin] = useState(false);
   const [openAdminOrder, setOpenAdminOrder] = useState<string | null>(null);
   const [newCustomer, setNewCustomer] = useState<Customer>({
     username: "",
@@ -1866,17 +2046,25 @@ function Admin({
     address: "",
     bestCategories: [],
   });
-  const nav = [
-    ["▤", "orders", t("Đơn hàng", "訂單管理")],
-    ["●", "customers", t("Khách hàng", "客戶管理")],
-    ["♟", "tiers", t("Quyền theo username", "Username最低價")],
-    ["％", "discounts", t("Chiết khấu theo nhóm", "類別數量折扣")],
-    ["▦", "products", t("Sản phẩm", "產品管理")],
-  ].filter((x) => role === "admin" || x[1] === "orders");
+  const [newAdmin, setNewAdmin] = useState<Customer>({
+    username: "",
+    password: DEMO_PASSWORD,
+    name: "",
+    tier: "small",
+    address: "Tân Đông",
+    bestCategories: [],
+    role: "admin",
+    adminPermissions: ["orders"],
+  });
+  const nav = adminPermissionDefinitions
+    .filter((item) => allowedAdminPermissions.includes(item.key))
+    .map((item) => [item.icon, item.key, t(item.vi, item.zh)] as const);
   const dealerCustomers = customers.filter(
     (customer) => !customer.role || customer.role === "dealer",
   );
-  const title: Record<string, string> = {
+  const adminAccounts = customers.filter((customer) => customer.role === "admin");
+  const canManageAdmins = currentUser.isPrimaryAdmin === true;
+  const title: Record<AdminPermission, string> = {
     orders: t("Quản lý đơn hàng", "訂單管理"),
     customers: t("Phân loại khách hàng", "客戶分類管理"),
     tiers: t("Quyền giá thấp nhất theo username", "Username個別最低價權限"),
@@ -2005,6 +2193,12 @@ function Admin({
         customer.username === username ? { ...customer, ...change } : customer,
       ),
     );
+  const updateAccount = (username: string, change: Partial<Customer>) => {
+    updateCustomer(username, change);
+    if (currentUser.username === username) {
+      setActiveUser((active) => (active ? { ...active, ...change } : active));
+    }
+  };
   const updateSpecification = (
     productId: number,
     index: number,
@@ -2118,14 +2312,31 @@ function Admin({
         ))}
         <button className="back" onClick={role === "admin" ? close : logout}>
           ← {role === "admin"
-            ? t("Về trang đại lý", "返回經銷商頁")
+            ? t("Trang sản phẩm", "前台商品頁")
             : t("Đăng xuất", "登出")}
         </button>
       </aside>
+      <nav
+        className="adminMobileNav"
+        aria-label={t("Menu quản trị", "後台管理選單")}
+        style={{ gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))` }}
+      >
+        {nav.map((item) => (
+          <button
+            className={tab === item[1] ? "active" : ""}
+            aria-current={tab === item[1] ? "page" : undefined}
+            onClick={() => setTab(item[1])}
+            key={item[1]}
+          >
+            <span>{item[0]}</span>
+            <small>{item[2]}</small>
+          </button>
+        ))}
+      </nav>
       <section className="adminMain">
         {role === "admin" && (
           <button className="adminFrontendButton" onClick={close}>
-            ← {t("Đi đến trang đặt hàng", "往前台")}
+            ← {t("Trang sản phẩm", "前台商品頁")}
           </button>
         )}
         <div className="adminHead">
@@ -2315,7 +2526,124 @@ function Admin({
           </div>
         )}
         {tab === "customers" && (
-          <div className="adminTable">
+          <div className="customerManagementStack">
+            <section className="adminAccountManager">
+              <div className="adminAccountManagerHead">
+                <div>
+                  <p className="eyebrow">{t("TÀI KHOẢN NỘI BỘ", "內部管理帳戶")}</p>
+                  <h2>{t("Quản trị viên & phân quyền", "管理者帳戶與權限")}</h2>
+                  <small>
+                    {t(
+                      "Quyền được đồng bộ với các mục chức năng hiện có trong menu quản trị.",
+                      "權限項目與目前後台功能選單共用同一份規則。",
+                    )}
+                  </small>
+                </div>
+                {canManageAdmins && (
+                  <button onClick={() => setShowNewAdmin((open) => !open)}>
+                    ＋ {t("Thêm quản trị viên", "新增管理者")}
+                  </button>
+                )}
+              </div>
+              {showNewAdmin && canManageAdmins && (
+                <form
+                  className="newAdminForm"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (
+                      !newAdmin.username ||
+                      !newAdmin.name ||
+                      !newAdmin.password ||
+                      customers.some((account) => account.username === newAdmin.username)
+                    ) return;
+                    setCustomers((accounts) => [...accounts, newAdmin]);
+                    setNewAdmin({
+                      username: "",
+                      password: DEMO_PASSWORD,
+                      name: "",
+                      tier: "small",
+                      address: "Tân Đông",
+                      bestCategories: [],
+                      role: "admin",
+                      adminPermissions: ["orders"],
+                    });
+                    setShowNewAdmin(false);
+                  }}
+                >
+                  <div className="newAdminFields">
+                    <label><span>Username</span><input required value={newAdmin.username} onChange={(event) => setNewAdmin((account) => ({ ...account, username: event.target.value.trim().toLowerCase() }))}/></label>
+                    <label><span>{t("Tên hiển thị", "顯示名稱")}</span><input required value={newAdmin.name} onChange={(event) => setNewAdmin((account) => ({ ...account, name: event.target.value }))}/></label>
+                    <label><span>{t("Mật khẩu", "密碼")}</span><input required value={newAdmin.password} onChange={(event) => setNewAdmin((account) => ({ ...account, password: event.target.value }))}/></label>
+                    <label><span>Email</span><input type="email" value={newAdmin.email || ""} onChange={(event) => setNewAdmin((account) => ({ ...account, email: event.target.value }))}/></label>
+                    <label><span>{t("Điện thoại", "電話")}</span><input value={newAdmin.companyPhone || ""} onChange={(event) => setNewAdmin((account) => ({ ...account, companyPhone: event.target.value }))}/></label>
+                  </div>
+                  <fieldset className="adminPermissionPicker">
+                    <legend>{t("Quyền ban đầu", "初始管理權限")}</legend>
+                    {adminPermissionDefinitions.map((permission) => (
+                      <label key={permission.key}>
+                        <input
+                          type="checkbox"
+                          checked={(newAdmin.adminPermissions || []).includes(permission.key)}
+                          onChange={(event) => setNewAdmin((account) => ({
+                            ...account,
+                            adminPermissions: event.target.checked
+                              ? [...new Set([...(account.adminPermissions || []), permission.key])]
+                              : (account.adminPermissions || []).filter((key) => key !== permission.key),
+                          }))}
+                        />
+                        <span><b>{permission.icon} {t(permission.vi, permission.zh)}</b><small>{t(permission.descriptionVi, permission.descriptionZh)}</small></span>
+                      </label>
+                    ))}
+                  </fieldset>
+                  <button className="primary">{t("Tạo quản trị viên", "建立管理者帳戶")}</button>
+                </form>
+              )}
+              <div className="adminAccountList">
+                {adminAccounts.map((account, index) => {
+                  const accountPermissions = permissionsFor(account);
+                  const canEditBasic = canManageAdmins || account.username === currentUser.username;
+                  return (
+                    <details className="adminAccountCard" key={account.username}>
+                      <summary>
+                        <span className="adminSequence">{index + 1}</span>
+                        <span><b>{account.name}</b><small>@{account.username}</small></span>
+                        <strong>{account.isPrimaryAdmin ? t("Quản trị viên chính", "第一管理者") : `${accountPermissions.length} / ${ALL_ADMIN_PERMISSIONS.length} ${t("quyền", "項權限")}`}</strong>
+                        <i>⌄</i>
+                      </summary>
+                      <div className="adminAccountDetails">
+                        <div className="adminBasicFields">
+                          <label><span>{t("Tên hiển thị", "顯示名稱")}</span><input disabled={!canEditBasic} value={account.name} onChange={(event) => updateAccount(account.username, { name: event.target.value })}/></label>
+                          <label><span>{t("Mật khẩu", "密碼")}</span><input disabled={!canEditBasic} value={account.password} onChange={(event) => updateAccount(account.username, { password: event.target.value })}/></label>
+                          <label><span>Email</span><input disabled={!canEditBasic} type="email" value={account.email || ""} onChange={(event) => updateAccount(account.username, { email: event.target.value })}/></label>
+                          <label><span>{t("Điện thoại", "電話")}</span><input disabled={!canEditBasic} value={account.companyPhone || ""} onChange={(event) => updateAccount(account.username, { companyPhone: event.target.value })}/></label>
+                          <label className="wide"><span>{t("Địa chỉ / đơn vị", "地址／單位")}</span><input disabled={!canEditBasic} value={account.address} onChange={(event) => updateAccount(account.username, { address: event.target.value })}/></label>
+                        </div>
+                        <fieldset className="adminPermissionPicker">
+                          <legend>{t("Phân quyền chức năng", "功能權限設定")}</legend>
+                          {adminPermissionDefinitions.map((permission) => (
+                            <label className={account.isPrimaryAdmin ? "locked" : ""} key={permission.key}>
+                              <input
+                                type="checkbox"
+                                disabled={account.isPrimaryAdmin || !canManageAdmins}
+                                checked={accountPermissions.includes(permission.key)}
+                                onChange={(event) => updateAccount(account.username, {
+                                  adminPermissions: event.target.checked
+                                    ? [...new Set([...accountPermissions, permission.key])]
+                                    : accountPermissions.filter((key) => key !== permission.key),
+                                })}
+                              />
+                              <span><b>{permission.icon} {t(permission.vi, permission.zh)}</b><small>{t(permission.descriptionVi, permission.descriptionZh)}</small></span>
+                            </label>
+                          ))}
+                          {account.isPrimaryAdmin && <p>🔒 {t("Tài khoản quản trị chính luôn có toàn bộ quyền.", "第一管理者固定擁有全部權限。")}</p>}
+                        </fieldset>
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            </section>
+            <div className="adminTable">
             <div className="tableTools">
               <b>{t("Username & cấp khách hàng", "Username與客戶等級")}</b>
               <span className="countPill">{dealerCustomers.length} usernames</span>
@@ -2449,6 +2777,7 @@ function Admin({
                 </div>
               </details>
             ))}
+            </div>
           </div>
         )}
         {tab === "products" && (
