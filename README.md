@@ -178,6 +178,14 @@ tests/          Automated tests
 worker/         Worker entry point
 ```
 
+## Engineering documentation
+
+- [`AGENTS.md`](AGENTS.md) - persistent Codex engineering and safety rules
+- [`BUSINESS_RULES.md`](BUSINESS_RULES.md) - protected pricing, customer, SKU, order, and language behavior
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) - feature-to-file and dependency map
+- [`TESTING.md`](TESTING.md) - minimum verification and regression checks
+- [`requirements/`](requirements/) - owner-approved, scoped work orders and template
+
 ## Development workflow
 
 The team workflow is:
