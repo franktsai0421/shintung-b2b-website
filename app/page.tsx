@@ -63,6 +63,8 @@ type OrderLine = {
   packQty?: number;
   cartons?: number;
   looseQty?: number;
+  confirmedCartons?: number;
+  packingNote?: string;
 };
 type Order = {
   id: string;
@@ -190,7 +192,7 @@ const initialOrders: Order[] = [
     adminNote: "Đã giữ hàng, giao buổi sáng.",
     lines: [
       { productId: 1, quantity: 100, unitPrice: 25600, variantId: "102XI05-0" },
-      { productId: 101, quantity: 20, unitPrice: 94400, variantId: "103S283201-0" },
+      { productId: 101, quantity: 20, unitPrice: 94400, variantId: "103S283201-0", confirmedCartons: 1, packingNote: "20 pcs lẻ đóng riêng trong 1 thùng có nhãn." },
     ],
   },
   {
@@ -730,6 +732,7 @@ export default function Home() {
     Record<number, string>
   >({});
   const [cart, setCart] = useState<Record<number, number>>({});
+  const [miniCartExpanded, setMiniCartExpanded] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Product | null>(null);
   const [toast, setToast] = useState("");
@@ -1555,7 +1558,8 @@ export default function Home() {
                               const cartons = line.cartons ?? Math.floor(line.quantity / packQty);
                               const loose = line.looseQty ?? line.quantity % packQty;
                               const pricePercent = line.discountPercent || Math.round((line.unitPrice/v.base)*100);
-                              return <div key={`${o.id}-${line.productId}`}><img src={p.image} alt=""/><span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · {line.quantity} pcs · {t("chiết khấu","折扣")} {100-pricePercent}%</small><em>{cartons} {t("thùng","箱")} {loose > 0 ? `＋ ${loose} pcs ${t("lẻ","散裝")}` : `· ${t("đủ thùng","整箱")}`}</em></span><strong>{fmt(line.unitPrice * line.quantity)}</strong></div>;
+                              const confirmedCartons = line.confirmedCartons ?? cartons;
+                              return <div key={`${o.id}-${line.productId}`}><img src={p.image} alt=""/><span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · {line.quantity} pcs · {t("chiết khấu","折扣")} {100-pricePercent}%</small><em>{t("Đặt hàng", "訂購")}：{cartons} {t("thùng","箱")} {loose > 0 ? `＋ ${loose} pcs ${t("lẻ","散裝")}` : `· ${t("đủ thùng","整箱")}`}</em><em className="confirmedPacking">{t("Đã xác nhận", "已確認")}：{confirmedCartons} {t("thùng", "箱")}{line.packingNote ? ` · ${line.packingNote}` : ""}</em></span><strong>{fmt(line.unitPrice * line.quantity)}</strong></div>;
                             })}
                           </div>
                           <dl>
@@ -1593,13 +1597,24 @@ export default function Home() {
         </>
       )}
       {!admin && cartItems.length > 0 && view !== "cart" && (
-        <aside className="miniCart">
-          <header>
-            <div><b>{t("Đơn đang chọn", "目前已選訂單")}</b><small>{cartItems.length} {t("sản phẩm", "項產品")}</small></div>
+        <aside className={`miniCart ${miniCartExpanded ? "expanded" : "collapsed"}`}>
+          <button
+            className="miniCartToggle"
+            type="button"
+            aria-expanded={miniCartExpanded}
+            aria-controls="mini-cart-details"
+            onClick={() => setMiniCartExpanded((expanded) => !expanded)}
+          >
+            <span className="miniCartTitle">
+              <b>{t("Đơn đang chọn", "目前已選訂單")}</b>
+              <small>· {cartItems.length} {t("sản phẩm", "項產品")}</small>
+            </span>
             <strong>{fmt(total)}</strong>
-          </header>
+            <i aria-hidden="true">⌃</i>
+          </button>
+          <div className="miniCartDetails" id="mini-cart-details">
           <div className="miniCartLines">
-            {cartItems.slice(0, 3).map((p) => {
+            {cartItems.map((p) => {
               const selectedVariant = variant(p);
               const cartons = Math.floor(p.quantity / selectedVariant.packQty);
               const loose = p.quantity % selectedVariant.packQty;
@@ -1616,9 +1631,9 @@ export default function Home() {
                 </div>
               );
             })}
-            {cartItems.length > 3 && <small className="moreItems">＋{cartItems.length - 3} {t("sản phẩm khác", "項其他產品")}</small>}
           </div>
           <button className="miniCheckout" onClick={() => setView("cart")}>{t("Kiểm tra & gửi đơn", "查看並送出訂單")} →</button>
+          </div>
         </aside>
       )}
       {!admin && <nav className="bottomNav">
@@ -2356,11 +2371,6 @@ function Admin({
                 : t("Lưu & áp dụng", "儲存並套用")}
             </button>
           )}
-          {tab === "customers" && (
-            <button onClick={() => setShowNewCustomer(true)}>
-              ＋ {t("Thêm username", "新增Username")}
-            </button>
-          )}
         </div>
         {(tab === "tiers" || tab === "discounts") && (
           <div className="adminIntro">
@@ -2527,7 +2537,7 @@ function Admin({
         )}
         {tab === "customers" && (
           <div className="customerManagementStack">
-            <section className="adminAccountManager">
+            <section className="adminAccountManager internalAccountManager">
               <div className="adminAccountManagerHead">
                 <div>
                   <p className="eyebrow">{t("TÀI KHOẢN NỘI BỘ", "內部管理帳戶")}</p>
@@ -2643,7 +2653,17 @@ function Admin({
                 })}
               </div>
             </section>
-            <div className="adminTable">
+            <section className="adminTable dealerAccountManager">
+            <div className="dealerAccountManagerHead">
+              <div>
+                <p className="eyebrow">{t("TÀI KHOẢN KHÁCH HÀNG", "客戶訂貨帳戶")}</p>
+                <h2>{t("Username khách hàng & cấp giá", "客戶 Username 與價格等級")}</h2>
+                <small>{t("Dùng cho khách hàng đăng nhập, đặt hàng và áp dụng cấp giá.", "供客戶登入、訂貨及套用所屬價格等級。")}</small>
+              </div>
+              <button onClick={() => setShowNewCustomer((open) => !open)}>
+                ＋ {t("Thêm username khách hàng", "新增客戶 Username")}
+              </button>
+            </div>
             <div className="tableTools">
               <b>{t("Username & cấp khách hàng", "Username與客戶等級")}</b>
               <span className="countPill">{dealerCustomers.length} usernames</span>
@@ -2777,7 +2797,7 @@ function Admin({
                 </div>
               </details>
             ))}
-            </div>
+            </section>
           </div>
         )}
         {tab === "products" && (
@@ -2913,6 +2933,18 @@ function Admin({
             <div className="adminIntro"><b>{role === "warehouse" ? t("Đơn đã xác nhận có thể chuyển sang một trạng thái chuẩn bị & phân phối.","已確認訂單可切換成單一的「備貨與配貨」狀態。") : role === "delivery" ? t("Đơn chuẩn bị & phân phối có thể báo đã giao hoặc giao thất bại.","僅「備貨與配貨」訂單可回報已交貨或交貨失敗。") : t("Xác nhận số tiền và ngày giao để phản hồi ngay cho đại lý.","確認正式金額與交貨日期後，立即回饋給經銷商。")}</b><span>{role === "admin" ? t("Đơn đang chờ xác nhận vẫn có thể được khách hàng sửa.","等待確認中的訂單，客戶仍可自行修改。") : t("Trạng thái được cập nhật ngay cho người liên quan.","狀態會即時更新給相關人員。")}</span></div>
             {visibleOrders.map((o) => {
               const customer = customers.find((c) => c.username === o.username);
+              const packingSummary = o.lines.reduce((summary, line) => {
+                const product = products.find((item) => item.id === line.productId);
+                const productVariant = product?.variants.find((item) => item.id === line.variantId) || product?.variants[0];
+                const packQty = line.packQty || productVariant?.packQty || 1;
+                const cartons = line.cartons ?? Math.floor(line.quantity / packQty);
+                const loose = line.looseQty ?? line.quantity % packQty;
+                return {
+                  cartons: summary.cartons + cartons,
+                  loose: summary.loose + loose,
+                  confirmedCartons: summary.confirmedCartons + (line.confirmedCartons ?? cartons),
+                };
+              }, { cartons: 0, loose: 0, confirmedCartons: 0 });
               return <article className={`adminOrderCard ${o.status === "waiting" ? "needsAction" : ""}`} key={o.id}>
                 <header>
                   <div><b>{o.id}</b><small>{o.createdAt} · @{o.username}</small></div>
@@ -2921,7 +2953,10 @@ function Admin({
                     {statusLabel(o.status)}
                     {stageNumber(o.status) > 0 && <small>{t("Giai đoạn", "目前階段")} {stageNumber(o.status)}/3</small>}
                   </span>
-                  <strong>{fmt(o.confirmedAmount || o.amount)}</strong>
+                  <div className="adminOrderTotal">
+                    <strong>{fmt(o.confirmedAmount || o.amount)}</strong>
+                    <small>{t("Đặt hàng", "訂購")} {packingSummary.cartons} {t("thùng", "箱")} ＋ {packingSummary.loose} {t("pcs lẻ", "散裝件")} · {t("Tổng cộng", "總共")} {packingSummary.confirmedCartons} {t("thùng", "箱")}</small>
+                  </div>
                   <button onClick={() => setOpenAdminOrder(openAdminOrder === o.id ? null : o.id)}>{openAdminOrder === o.id ? t("Thu gọn","收合") : t("Xử lý đơn","處理訂單")} →</button>
                 </header>
                 {openAdminOrder === o.id && <div className="adminOrderEditor">
@@ -2938,6 +2973,7 @@ function Admin({
                       const packQty=line.packQty||v.packQty;
                       const cartons=line.cartons??Math.floor(line.quantity/packQty);
                       const loose=line.looseQty??line.quantity%packQty;
+                      const confirmedCartons=line.confirmedCartons??cartons;
                       const pricePercent=line.discountPercent||Math.round((line.unitPrice/v.base)*100);
                       const discount=100-pricePercent;
                       return <div className="packingRow" key={`${o.id}-${line.productId}`}>
@@ -2945,15 +2981,17 @@ function Admin({
                         <strong>{line.quantity} pcs</strong>
                         <span><b>{fmt(line.unitPrice)}</b><small>{t("Tạm tính","小計")} {fmt(line.unitPrice*line.quantity)}</small></span>
                         <strong className="discountValue">{discount}%</strong>
-                        <div className="packingControls">
-                          <label><small>{t("Số thùng","箱數")}</small><input disabled={role === "delivery"} type="number" min="0" value={cartons} onChange={(e)=>updateOrderLine(o.id,line.productId,{cartons:Math.max(0,Number(e.target.value))})}/></label>
-                          <label><small>{t("Pcs lẻ","散裝件")}</small><input disabled={role === "delivery"} type="number" min="0" value={loose} onChange={(e)=>updateOrderLine(o.id,line.productId,{looseQty:Math.max(0,Number(e.target.value))})}/></label>
-                          <em className={loose>0||line.quantity<packQty?"packingWarning":"packingOk"}>{line.quantity<packQty?t("Chưa đủ 1 thùng","不足一箱"):loose>0?t("Có hàng lẻ","含散裝"):t("Đủ thùng","整箱")}</em>
+                        <div className={`packingControls ${loose > 0 ? "hasLoosePacking" : "wholeCartonPacking"}`}>
+                          <div className="orderedPacking"><small>{t("Đặt hàng", "訂購裝箱")}</small><b>{cartons} {t("thùng", "箱")} ＋ {loose} {t("pcs lẻ", "散裝件")}</b></div>
+                          {loose > 0 ? <>
+                            <label className="confirmedCartonField"><small>{t("Số thùng đã xác nhận","確認箱數")}</small><input disabled={role === "delivery"} type="number" min="0" value={confirmedCartons} onChange={(e)=>updateOrderLine(o.id,line.productId,{confirmedCartons:Math.max(0,Math.floor(Number(e.target.value) || 0))})}/></label>
+                            <label className="packingNoteField"><small>{t("Ghi chú cách đóng hàng lẻ","散裝裝箱備註")}</small><textarea disabled={role === "delivery"} placeholder={t("Ví dụ: hàng lẻ đóng riêng 1 thùng và dán nhãn...","例如：散裝另裝一箱並貼標籤…")} value={line.packingNote || ""} onChange={(e)=>updateOrderLine(o.id,line.productId,{packingNote:e.target.value})}/></label>
+                          </> : <div className="fixedPackingResult"><small>{t("Số thùng đã xác nhận", "確認箱數")}</small><b>{confirmedCartons} {t("thùng", "箱")}</b><em className="packingOk">{t("Đủ thùng · không cần điều chỉnh", "整箱 · 無需調整")}</em></div>}
                         </div>
                       </div>;
                     })}
                   </div>
-                  {role === "admin" && <button className="confirmOrder" onClick={() => updateOrder(o.id,{status:o.status === "waiting" ? "confirmed" : o.status,confirmedAmount:o.confirmedAmount || o.amount})}>✓ {t("Lưu & phản hồi đại lý", "儲存並回饋經銷商")}</button>}
+                  <p className="adminAutoSaveHint">✓ {t("Các thay đổi được lưu tự động và hiển thị ngay cho khách hàng.", "變更會自動儲存並立即顯示給客戶。")}</p>
                 </div>}
               </article>;
             })}
