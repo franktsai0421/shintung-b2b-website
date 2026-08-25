@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  certificates,
+  legacyBlogPosts,
+  machines,
+  type BlogPost,
+} from "./companyContent";
 
 type Tier = "large" | "medium" | "small";
 type UserRole = "dealer" | "admin" | "warehouse" | "delivery";
@@ -669,6 +675,7 @@ const fmt = (n: number) =>
   new Intl.NumberFormat("vi-VN").format(Math.round(n / 100) * 100) + " ₫";
 
 const ADMIN_STORAGE_KEY = "tan-dong-pro-workflow-v2";
+const CONTENT_STORAGE_KEY = "shintung-content-hub-v1";
 type StoredWorkflowData = {
   customers?: Customer[];
   products?: Product[];
@@ -703,6 +710,16 @@ const loadStoredWorkflowData = (): StoredWorkflowData => {
     return {};
   }
 };
+const loadStoredContent = () => {
+  if (typeof window === "undefined") return legacyBlogPosts;
+  try {
+    const saved = window.localStorage.getItem(CONTENT_STORAGE_KEY);
+    const parsed = saved ? (JSON.parse(saved) as BlogPost[]) : null;
+    return Array.isArray(parsed) && parsed.length ? parsed : legacyBlogPosts;
+  } catch {
+    return legacyBlogPosts;
+  }
+};
 
 export default function Home() {
   const [storedWorkflowData] = useState(loadStoredWorkflowData);
@@ -718,11 +735,13 @@ export default function Home() {
   const [orders, setOrders] = useState(
     () => storedWorkflowData.orders || initialOrders,
   );
+  const [contentPosts, setContentPosts] = useState<BlogPost[]>(loadStoredContent);
   const [user, setUser] = useState<Customer | null>(null);
   const [username, setUsername] = useState("minhphat");
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [lang, setLang] = useState<"vi" | "zh">("vi");
   const [view, setView] = useState("home");
+  const [contentStartTab, setContentStartTab] = useState<"story" | "news" | "quality">("story");
   const [admin, setAdmin] = useState(false);
   const [adminLandingTab, setAdminLandingTab] = useState<AdminPermission>("discounts");
   const [category, setCategory] = useState("all");
@@ -748,6 +767,13 @@ export default function Home() {
       // The interface remains usable even when local storage is unavailable.
     }
   }, [customers, productList, categoryStages, orders]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CONTENT_STORAGE_KEY, JSON.stringify(contentPosts));
+    } catch {
+      // Content remains readable even when this browser blocks local storage.
+    }
+  }, [contentPosts]);
   const variant = (p: Product) =>
     p.variants.find((v) => v.id === variantByProduct[p.id]) || p.variants[0];
   const packQtyFor = (p: Product) => variant(p).packQty;
@@ -856,21 +882,21 @@ export default function Home() {
     return (
       <main className="loginPage">
         <section className="loginBrand">
-          <div className="brandMark">TĐ</div>
-          <p className="eyebrow">CỔNG ĐẶT HÀNG DÀNH CHO ĐẠI LÝ</p>
+          <img className="onspaLoginLogo" src="/brand/onspa-logo.png" alt="ONSPA · Work with Passion" />
+          <p className="eyebrow">SHIN TUNG VIETNAM CO., LTD · 越南新東公司</p>
           <h1>
-            Đặt hàng Tân Đông
+            Đặt hàng rõ ràng,
             <br />
-            <em>nhanh hơn mỗi ngày.</em>
+            <em>đồng hành bằng nhiệt huyết.</em>
           </h1>
           <p>
-            Giá theo cấp đại lý · Chiết khấu theo số lượng · Xác nhận bởi Tân
-            Đông
+            Hơn 25 năm sản xuất thiết bị ngành nước · Giá đại lý minh bạch ·
+            Chất lượng được kiểm chứng
           </p>
           <div className="trustRow">
             <span>✓ Giá riêng bảo mật</span>
-            <span>✓ Chiết khấu rõ ràng</span>
-            <span>✓ Hỗ trợ Zalo</span>
+            <span>✓ ISO 9001:2015</span>
+            <span>✓ Work with Passion</span>
           </div>
         </section>
         <section className="loginPanel">
@@ -1066,11 +1092,18 @@ export default function Home() {
     <main className="appShell">
       <header className="topbar">
         <button className="logo" onClick={() => setView("home")}>
-          <span>TĐ</span>
+          <img src="/brand/onspa-logo.png" alt="ONSPA" />
           <b>
-            TÂN ĐÔNG<small>PRO</small>
+            SHIN TUNG<small>VIETNAM CO., LTD</small>
           </b>
         </button>
+        {!admin && (
+          <nav className="brandNav" aria-label={t("Thông tin công ty", "公司資訊")}>
+            <button onClick={() => { setContentStartTab("story"); setView("content"); }}>{t("Câu chuyện", "品牌故事")}</button>
+            <button onClick={() => { setContentStartTab("news"); setView("content"); }}>{t("Tin tức", "最新消息")}</button>
+            <button onClick={() => { setContentStartTab("quality"); setView("content"); }}>{t("Chất lượng", "品質保證")}</button>
+          </nav>
+        )}
         <div className="desktopSearch">
           <span>⌕</span>
           <input
@@ -1201,6 +1234,22 @@ export default function Home() {
                   <small>{fmt(total)}</small>
                 </button>
               </section>
+              <section className="brandStoryHero">
+                <div className="brandStoryCopy">
+                  <img src="/brand/onspa-logo.png" alt="ONSPA · Work with Passion" />
+                  <p className="eyebrow">{t("TỪ NĂM 2000 · TP. HỒ CHÍ MINH", "2000年創立 · 胡志明市")}</p>
+                  <h2>{t("Làm sản phẩm ngành nước bằng sự kiên trì và nhiệt huyết.", "以堅持與熱情，做好每一件水用產品。")}</h2>
+                  <p>{t("SHIN TUNG VIETNAM CO., LTD sản xuất thiết bị phòng tắm, tưới cây, điều khiển mực nước và phụ kiện công nghiệp. Từ nhà máy đến từng đơn hàng, chúng tôi giữ một lời hứa: Work with Passion.", "越南新東公司專注衛浴、園藝灌溉、水位控制與工業配件。從工廠到每一筆訂單，我們始終守住同一個承諾：Work with Passion。")}</p>
+                  <div>
+                    <button onClick={() => { setContentStartTab("story"); setView("content"); }}>{t("Gặp gỡ Shin Tung", "認識新東")} →</button>
+                    <button className="soft" onClick={() => { setContentStartTab("quality"); setView("content"); }}>{t("Xem phòng kiểm nghiệm", "查看品質實驗室")}</button>
+                  </div>
+                </div>
+                <div className="brandStoryMosaic" aria-label={t("Hình ảnh công ty", "公司影像")}>
+                  <img src="https://www.shintung-onspa.com/upload/2022/09/23/1663948034.jpg" alt={t("Nhà máy Shin Tung Việt Nam", "越南新東公司廠房")} />
+                  <img src="https://www.shintung-onspa.com/upload/2022/09/23/1663948051.jpg" alt={t("Đội ngũ Shin Tung Việt Nam", "越南新東公司團隊")} />
+                </div>
+              </section>
               <section className="quickGrid">
                 <button
                   className="quick orange"
@@ -1236,11 +1285,11 @@ export default function Home() {
                     <small>{t("Từ đơn gần nhất", "從最近訂單加入")}</small>
                   </span>
                 </button>
-                <button className="quick" onClick={() => setView("videos")}>
+                <button className="quick" onClick={() => { setContentStartTab("news"); setView("content"); }}>
                   <span className="icon">▶</span>
                   <span>
-                    <b>{t("Video lắp đặt", "安裝影片")}</b>
-                    <small>{t("Xem hướng dẫn", "觀看教學")}</small>
+                    <b>{t("Tin tức & video", "消息與影片")}</b>
+                    <small>{t("Xem bài viết cũ và mới", "查看歷年文章")}</small>
                   </span>
                 </button>
               </section>
@@ -1433,6 +1482,18 @@ export default function Home() {
                     : t("Đã gửi đơn · Chờ xác nhận", "訂單已送出・等待確認"),
                 );
               }}
+            />
+          )}
+          {view === "content" && (
+            <ContentHub
+              key={`${contentStartTab}-${lang}`}
+              initialTab={contentStartTab}
+              posts={contentPosts}
+              setPosts={setContentPosts}
+              canManage={user.role === "admin"}
+              lang={lang}
+              t={t}
+              orderNow={() => setView("products")}
             />
           )}
           {view === "videos" && (
@@ -1641,7 +1702,7 @@ export default function Home() {
           ["⌂", "home", "Trang chủ", "首頁"],
           ["▦", "products", "Sản phẩm", "產品"],
           ["＋", "cart", "Đặt hàng", "訂貨"],
-          ["▶", "videos", "Video", "影片"],
+          ["●", "content", "Tin tức", "消息"],
           ["●", "account", "Của tôi", "我的"],
         ].map((n) => (
           <button
@@ -1689,6 +1750,151 @@ export default function Home() {
       )}
       {toast && <div className="toast">✓ {toast}</div>}
     </main>
+  );
+}
+
+function ContentHub({
+  initialTab,
+  posts,
+  setPosts,
+  canManage,
+  lang,
+  t,
+  orderNow,
+}: {
+  initialTab: "story" | "news" | "quality";
+  posts: BlogPost[];
+  setPosts: React.Dispatch<React.SetStateAction<BlogPost[]>>;
+  canManage: boolean;
+  lang: "vi" | "zh";
+  t: (vi: string, zh: string) => string;
+  orderNow: () => void;
+}) {
+  const [tab, setTab] = useState(initialTab);
+  const [year, setYear] = useState("all");
+  const [query, setQuery] = useState("");
+  const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const emptyDraft = {
+    title: "",
+    date: new Date().toLocaleDateString("vi-VN"),
+    year: String(new Date().getFullYear()),
+    image: "",
+    summary: "",
+    video: "",
+  };
+  const [draft, setDraft] = useState(emptyDraft);
+  const years = [...new Set(posts.map((post) => post.year))].sort((a, b) => Number(b) - Number(a));
+  const visiblePosts = posts
+    .filter((post) => year === "all" || post.year === year)
+    .filter((post) => `${post.title} ${post.summary}`.toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => b.id - a.id);
+  const startEdit = (post: BlogPost) => {
+    setEditingId(post.id);
+    setDraft({ title: post.title, date: post.date, year: post.year, image: post.image, summary: post.summary, video: post.video || "" });
+    setShowEditor(true);
+  };
+  const saveDraft = () => {
+    if (!draft.title.trim() || !draft.summary.trim()) return;
+    if (editingId) {
+      setPosts((items) => items.map((post) => post.id === editingId ? { ...post, ...draft, video: draft.video || undefined } : post));
+    } else {
+      setPosts((items) => [{ id: Math.max(0, ...items.map((post) => post.id)) + 1, ...draft, video: draft.video || undefined }, ...items]);
+    }
+    setDraft(emptyDraft);
+    setEditingId(null);
+    setShowEditor(false);
+  };
+
+  return (
+    <div className="contentHub">
+      <section className="contentHero">
+        <div>
+          <img src="/brand/onspa-logo.png" alt="ONSPA" />
+          <p className="eyebrow">SHIN TUNG VIETNAM CO., LTD · 越南新東公司</p>
+          <h1>{t("Sản phẩm có chất lượng. Một thương hiệu có câu chuyện.", "產品有品質，品牌有故事。")}</h1>
+          <p>{t("Nơi khách hàng hiểu thêm về con người, quy trình và cam kết đứng sau mỗi sản phẩm Shin Tung.", "讓客戶看見每一件新東產品背後的人、製程與承諾。")}</p>
+        </div>
+        <button onClick={orderNow}>{t("Tiếp tục đặt hàng", "繼續訂貨")} →</button>
+      </section>
+      <nav className="contentTabs" aria-label={t("Nội dung công ty", "公司內容")}>
+        <button className={tab === "story" ? "active" : ""} onClick={() => setTab("story")}>⌂ {t("Câu chuyện", "品牌故事")}</button>
+        <button className={tab === "news" ? "active" : ""} onClick={() => setTab("news")}>▤ {t("Tin tức & video", "消息與影片")}</button>
+        <button className={tab === "quality" ? "active" : ""} onClick={() => setTab("quality")}>✓ {t("Chất lượng", "品質保證")}</button>
+      </nav>
+
+      {tab === "story" && (
+        <div className="storyPage">
+          <section className="storyLead">
+            <div className="storyCollage">
+              <img src="https://www.shintung-onspa.com/upload/2022/09/23/1663948034.jpg" alt={t("Nhà máy Shin Tung", "新東公司廠房")} />
+              <img src="https://www.shintung-onspa.com/upload/2022/09/23/1663948051.jpg" alt={t("Đội ngũ Shin Tung", "新東團隊")} />
+              <span><b>25+</b>{t("năm kinh nghiệm", "年專業經驗")}</span>
+            </div>
+            <article>
+              <p className="eyebrow">{t("CÂU CHUYỆN CỦA CHÚNG TÔI", "我們的故事")}</p>
+              <h2>{t("Từ một niềm tin đơn giản: có nhiệt huyết mới làm ra sản phẩm tốt.", "源自一個簡單信念：有熱情，才能做出好產品。")}</h2>
+              <p>{t("Công ty TNHH Shin Tung Việt Nam được thành lập năm 2000 tại Thành phố Hồ Chí Minh, chuyên sản xuất thiết bị ngành nước: phụ kiện phòng tắm, dây cấp nước, dây sen, công tắc phao, sản phẩm tưới cây và đầu nối công nghiệp.", "越南新東公司於2000年在胡志明市成立，專業製造水用設備，包括衛浴配件、給水軟管、花灑管、浮球開關、園藝灌溉與工業接頭。")}</p>
+              <p>{t("Các thương hiệu ONPAS, SANPO, ONSPA và SANHO đã đồng hành cùng khách hàng trong nước và nhiều thị trường Đông Nam Á. Chúng tôi không ngừng cải tiến sản phẩm, mở rộng thị trường và giữ sự kiên trì trong từng chi tiết.", "ONPAS、SANPO、ONSPA與SANHO服務越南及東南亞多個市場。我們持續改良產品、拓展市場，並在每個細節中保持耐心與堅持。")}</p>
+              <blockquote>“Work with Passion”<small>{t("Nhiệt huyết với thương hiệu để tạo ra sản phẩm tốt nhất.", "對品牌懷抱熱情，才能創造最好的產品。")}</small></blockquote>
+            </article>
+          </section>
+          <section className="storyValues">
+            <article><span>01</span><h3>{t("Hiểu nhu cầu thật", "理解真實需求")}</h3><p>{t("Thiết kế từ những vấn đề khách hàng gặp trong lắp đặt và sử dụng hằng ngày.", "從客戶每日安裝與使用的真實問題出發。")}</p></article>
+            <article><span>02</span><h3>{t("Kiểm chứng tại nhà máy", "廠內嚴謹驗證")}</h3><p>{t("Độ bền, áp lực, môi trường và vật liệu đều được kiểm tra bằng thiết bị chuyên dụng.", "使用專業設備驗證耐久、壓力、環境與材料。")}</p></article>
+            <article><span>03</span><h3>{t("Đồng hành lâu dài", "長期陪伴客戶")}</h3><p>{t("Thông tin rõ ràng, phản hồi nhanh và cải tiến liên tục sau mỗi sản phẩm.", "資訊清楚、回應迅速，並持續改進每一項產品。")}</p></article>
+          </section>
+        </div>
+      )}
+
+      {tab === "news" && (
+        <div className="newsPage">
+          <div className="newsToolbar">
+            <div><p className="eyebrow">{t("KHO TƯ LIỆU 2016–2025", "2016–2025歷年資料")}</p><h2>{t(`${posts.length} bài viết đã chuyển từ website cũ`, `已整合舊網站 ${posts.length} 篇文章`)}</h2></div>
+            {canManage && <button className="manageContentButton" onClick={() => { setEditingId(null); setDraft(emptyDraft); setShowEditor((open) => !open); }}>＋ {t("Thêm bài viết", "新增文章")}</button>}
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Tìm tiêu đề hoặc nội dung...", "搜尋標題或內容…")} />
+            <select value={year} onChange={(event) => setYear(event.target.value)}><option value="all">{t("Tất cả năm", "全部年份")}</option>{years.map((item) => <option value={item} key={item}>{item}</option>)}</select>
+          </div>
+          {showEditor && canManage && (
+            <section className="contentEditor">
+              <header><div><p className="eyebrow">{editingId ? t("CHỈNH SỬA", "編輯文章") : t("BÀI VIẾT MỚI", "新增文章")}</p><h3>{t("Nội dung hiển thị cho khách hàng", "客戶可見內容")}</h3></div><button onClick={() => setShowEditor(false)}>×</button></header>
+              <div className="editorFields">
+                <label><span>{t("Tiêu đề", "標題")}</span><input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
+                <label><span>{t("Ngày", "日期")}</span><input value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label>
+                <label><span>{t("Năm", "年份")}</span><input value={draft.year} onChange={(event) => setDraft({ ...draft, year: event.target.value })} /></label>
+                <label className="wide"><span>{t("URL hình ảnh", "圖片網址")}</span><input value={draft.image} onChange={(event) => setDraft({ ...draft, image: event.target.value })} /></label>
+                <label className="wide"><span>{t("URL video YouTube (embed)", "YouTube嵌入網址")}</span><input value={draft.video} onChange={(event) => setDraft({ ...draft, video: event.target.value })} /></label>
+                <label className="wide"><span>{t("Nội dung tóm tắt", "內容摘要")}</span><textarea value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} /></label>
+              </div>
+              <button className="saveContent" disabled={!draft.title.trim() || !draft.summary.trim()} onClick={saveDraft}>{t("Lưu & xuất bản", "儲存並發布")}</button>
+            </section>
+          )}
+          <div className="newsGrid">
+            {visiblePosts.map((post) => (
+              <article className="newsCard" key={post.id}>
+                <button className="newsImage" onClick={() => setSelectedPost(post)}><img src={post.image} alt="" /><span>{post.year}</span>{post.video && <i>▶</i>}</button>
+                <div><small>{post.date} · {post.video ? t("Bài viết + video", "文章＋影片") : t("Tin tức", "消息")}</small><h3>{post.title}</h3><p>{post.summary}</p><div><button onClick={() => setSelectedPost(post)}>{t("Đọc bài", "閱讀文章")} →</button>{canManage && <><button className="edit" onClick={() => startEdit(post)}>✎</button><button className="delete" onClick={() => setPosts((items) => items.filter((item) => item.id !== post.id))}>×</button></>}</div></div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "quality" && (
+        <div className="qualityPage">
+          <section className="qualityIntro"><div><p className="eyebrow">{t("CHẤT LƯỢNG CÓ THỂ KIỂM CHỨNG", "看得見的品質")}</p><h2>{t("Không chỉ nói về độ bền. Chúng tôi đo lường nó.", "不只談耐用，我們實際測量。")}</h2><p>{t("Phòng kiểm nghiệm nội bộ hỗ trợ đánh giá vật liệu, độ bền kéo, xoắn, ăn mòn, nhiệt độ, áp lực, tuổi thọ và lão hóa UV.", "內部實驗室可進行材料、拉力、扭力、腐蝕、溫度、壓力、壽命及UV老化等測試。")}</p></div><div className="qualityStats"><span><b>7</b>{t("nhóm thiết bị", "組測試設備")}</span><span><b>ISO</b>{t("quản lý chất lượng", "品質管理")}</span><span><b>100%</b>{t("hồ sơ có chú thích", "文件具完整說明")}</span></div></section>
+          <section><div className="qualitySectionHead"><p className="eyebrow">{t("PHÒNG KIỂM NGHIỆM", "品質實驗室")}</p><h2>{t("Thiết bị kiểm tra tại nhà máy", "廠內測試設備")}</h2></div><div className="machineGrid">{machines.map((machine) => <article key={machine.image}><img src={machine.image} alt={lang === "vi" ? machine.vi : machine.zh} /><div><h3>{lang === "vi" ? machine.vi : machine.zh}</h3><p>{lang === "vi" ? machine.detailVi : machine.detailZh}</p></div></article>)}</div></section>
+          <section><div className="qualitySectionHead"><p className="eyebrow">{t("CHỨNG NHẬN & BÁO CÁO", "證書與查證報告")}</p><h2>{t("Hồ sơ được nhận diện và ghi rõ thời hạn", "清楚標示名稱與有效期間")}</h2></div><div className="certificateGrid">{certificates.map((certificate) => <article key={certificate.image}><a href={certificate.image} target="_blank" rel="noreferrer"><img src={certificate.image} alt={certificate.name} /></a><div><span className={`certificateStatus ${certificate.status}`}>{certificate.status === "current" ? t("CÒN HIỆU LỰC", "有效") : certificate.status === "report" ? t("BÁO CÁO XÁC MINH", "查證報告") : t("HỒ SƠ LƯU TRỮ", "歷史文件")}</span><h3>{certificate.name}</h3><b>{certificate.period}</b><p>{lang === "vi" ? certificate.vi : certificate.zh}</p><a href={certificate.image} target="_blank" rel="noreferrer">{t("Xem ảnh gốc", "查看原始文件")} ↗</a></div></article>)}</div></section>
+        </div>
+      )}
+
+      {selectedPost && (
+        <div className="articleOverlay" role="dialog" aria-modal="true" aria-label={selectedPost.title} onClick={() => setSelectedPost(null)}>
+          <article className="articleViewer" onClick={(event) => event.stopPropagation()}><button className="closeArticle" onClick={() => setSelectedPost(null)}>×</button><img className="articleCover" src={selectedPost.image} alt="" /><div className="articleBody"><small>{selectedPost.date} · {selectedPost.year}</small><h2>{selectedPost.title}</h2><p>{selectedPost.summary}</p>{selectedPost.video && <iframe src={selectedPost.video} title={selectedPost.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />}{selectedPost.source && <a href={selectedPost.source} target="_blank" rel="noreferrer">{t("Xem tư liệu gốc", "查看原始資料")} ↗</a>}</div></article>
+        </div>
+      )}
+    </div>
   );
 }
 
