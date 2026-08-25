@@ -2977,7 +2977,10 @@ function Admin({
                       const pricePercent=line.discountPercent||Math.round((line.unitPrice/v.base)*100);
                       const discount=100-pricePercent;
                       return <div className="packingRow" key={`${o.id}-${line.productId}`}>
-                        <span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · 1 {t("thùng","箱")}={packQty} pcs</small></span>
+                        <div className="packingProduct">
+                          <img src={p.image} alt={`${p.code} · ${t(p.name, p.zh)}`} />
+                          <span><b>{p.code}</b><small>{t(v.label,v.labelZh)} · 1 {t("thùng","箱")}={packQty} pcs</small></span>
+                        </div>
                         <strong>{line.quantity} pcs</strong>
                         <span><b>{fmt(line.unitPrice)}</b><small>{t("Tạm tính","小計")} {fmt(line.unitPrice*line.quantity)}</small></span>
                         <strong className="discountValue">{discount}%</strong>
