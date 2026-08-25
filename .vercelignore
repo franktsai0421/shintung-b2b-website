@@ -1,0 +1,8 @@
+node_modules
+node_modules.vercel-stalled-20260824
+.pnpm-store
+.git
+.wrangler
+.sites-runtime
+dist
+work
