@@ -6,3 +6,5 @@ node_modules.vercel-stalled-20260824
 .sites-runtime
 dist
 work
+tmp
+.vite-preview*.log

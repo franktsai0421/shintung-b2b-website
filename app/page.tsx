@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   certificates,
   legacyBlogPosts,
@@ -715,11 +715,29 @@ const loadStoredContent = () => {
   try {
     const saved = window.localStorage.getItem(CONTENT_STORAGE_KEY);
     const parsed = saved ? (JSON.parse(saved) as BlogPost[]) : null;
-    return Array.isArray(parsed) && parsed.length ? parsed : legacyBlogPosts;
+    return Array.isArray(parsed) && parsed.length
+      ? parsed.map((post) => ({
+          ...legacyBlogPosts.find((legacy) => legacy.id === post.id),
+          ...post,
+          content: post.content || legacyBlogPosts.find((legacy) => legacy.id === post.id)?.content,
+          images: post.images?.length ? post.images : legacyBlogPosts.find((legacy) => legacy.id === post.id)?.images,
+          videos: post.videos?.length ? post.videos : legacyBlogPosts.find((legacy) => legacy.id === post.id)?.videos,
+        }))
+      : legacyBlogPosts;
   } catch {
     return legacyBlogPosts;
   }
 };
+
+function BrandLogos({ compact = false }: { compact?: boolean }) {
+  return (
+    <span className={`brandLogoSet ${compact ? "compact" : ""}`} aria-label="ONPAS · ONSPA · SANPO">
+      <img src="/brand/onpas-logo.png" alt="ONPAS" />
+      <img src="/brand/onspa-logo.png" alt="ONSPA" />
+      <img src="/brand/sanpo-logo.png" alt="SANPO" />
+    </span>
+  );
+}
 
 export default function Home() {
   const [storedWorkflowData] = useState(loadStoredWorkflowData);
@@ -864,9 +882,9 @@ export default function Home() {
         account.role === "delivery",
     );
   };
-  const goToStoreProducts = () => {
+  const goToStoreHome = () => {
     setAdmin(false);
-    setView("products");
+    setView("home");
     setCategory("all");
     setSearch("");
     setShowAccountMenu(false);
@@ -882,19 +900,21 @@ export default function Home() {
     return (
       <main className="loginPage">
         <section className="loginBrand">
-          <img className="onspaLoginLogo" src="/brand/onspa-logo.png" alt="ONSPA · Work with Passion" />
+          <BrandLogos />
           <p className="eyebrow">SHIN TUNG VIETNAM CO., LTD · 越南新東公司</p>
           <h1>
-            Đặt hàng rõ ràng,
+            {t("Đặt hàng rõ ràng,", "訂貨更清楚，")}
             <br />
-            <em>đồng hành bằng nhiệt huyết.</em>
+            <em>{t("đồng hành bằng nhiệt huyết.", "以熱情長久合作。")}</em>
           </h1>
           <p>
-            Hơn 25 năm sản xuất thiết bị ngành nước · Giá đại lý minh bạch ·
-            Chất lượng được kiểm chứng
+            {t(
+              "Hơn 25 năm sản xuất thiết bị ngành nước · Giá đại lý minh bạch · Chất lượng được kiểm chứng",
+              "超過25年水用設備製造經驗 · 經銷價格透明 · 品質經實證",
+            )}
           </p>
           <div className="trustRow">
-            <span>✓ Giá riêng bảo mật</span>
+            <span>✓ {t("Giá riêng bảo mật", "專屬價格保密")}</span>
             <span>✓ ISO 9001:2015</span>
             <span>✓ Work with Passion</span>
           </div>
@@ -923,6 +943,7 @@ export default function Home() {
               }
             }}
           >
+            <div className="mobileBrandLogos"><BrandLogos /></div>
             <div className="miniLogo">
               <b>TÂN ĐÔNG</b>
               <small>PRO</small>
@@ -1092,18 +1113,8 @@ export default function Home() {
     <main className="appShell">
       <header className="topbar">
         <button className="logo" onClick={() => setView("home")}>
-          <img src="/brand/onspa-logo.png" alt="ONSPA" />
-          <b>
-            SHIN TUNG<small>VIETNAM CO., LTD</small>
-          </b>
+          <b>SHIN TUNG VIETNAM CO.,LTD</b>
         </button>
-        {!admin && (
-          <nav className="brandNav" aria-label={t("Thông tin công ty", "公司資訊")}>
-            <button onClick={() => { setContentStartTab("story"); setView("content"); }}>{t("Câu chuyện", "品牌故事")}</button>
-            <button onClick={() => { setContentStartTab("news"); setView("content"); }}>{t("Tin tức", "最新消息")}</button>
-            <button onClick={() => { setContentStartTab("quality"); setView("content"); }}>{t("Chất lượng", "品質保證")}</button>
-          </nav>
-        )}
         <div className="desktopSearch">
           <span>⌕</span>
           <input
@@ -1119,18 +1130,18 @@ export default function Home() {
           />
         </div>
         <div className="topActions">
-          <button onClick={() => setLang(lang === "vi" ? "zh" : "vi")}>
+          <button className="langToggleButton" onClick={() => setLang(lang === "vi" ? "zh" : "vi")}>
             {lang === "vi" ? "中文" : "VI"}
           </button>
           {user.role === "admin" && (
             <button
               className="modeSwitchButton"
-              onClick={() => (admin ? goToStoreProducts() : setAdmin(true))}
+              onClick={() => (admin ? goToStoreHome() : setAdmin(true))}
             >
               {admin ? "←" : "⚙"}{" "}
               <span>
                 {admin
-                  ? t("Trang sản phẩm", "前台商品頁")
+                  ? t("Trang chủ", "前台首頁")
                   : t("Vào quản trị", "進入後台管理")}
               </span>
             </button>
@@ -1188,7 +1199,7 @@ export default function Home() {
           setActiveUser={setUser}
           initialTab={adminLandingTab}
           close={() => {
-            goToStoreProducts();
+            goToStoreHome();
             setUser(
               customers.find((c) => c.username === user.username) || user,
             );
@@ -1236,7 +1247,7 @@ export default function Home() {
               </section>
               <section className="brandStoryHero">
                 <div className="brandStoryCopy">
-                  <img src="/brand/onspa-logo.png" alt="ONSPA · Work with Passion" />
+                  <BrandLogos />
                   <p className="eyebrow">{t("TỪ NĂM 2000 · TP. HỒ CHÍ MINH", "2000年創立 · 胡志明市")}</p>
                   <h2>{t("Làm sản phẩm ngành nước bằng sự kiên trì và nhiệt huyết.", "以堅持與熱情，做好每一件水用產品。")}</h2>
                   <p>{t("SHIN TUNG VIETNAM CO., LTD sản xuất thiết bị phòng tắm, tưới cây, điều khiển mực nước và phụ kiện công nghiệp. Từ nhà máy đến từng đơn hàng, chúng tôi giữ một lời hứa: Work with Passion.", "越南新東公司專注衛浴、園藝灌溉、水位控制與工業配件。從工廠到每一筆訂單，我們始終守住同一個承諾：Work with Passion。")}</p>
@@ -1244,10 +1255,6 @@ export default function Home() {
                     <button onClick={() => { setContentStartTab("story"); setView("content"); }}>{t("Gặp gỡ Shin Tung", "認識新東")} →</button>
                     <button className="soft" onClick={() => { setContentStartTab("quality"); setView("content"); }}>{t("Xem phòng kiểm nghiệm", "查看品質實驗室")}</button>
                   </div>
-                </div>
-                <div className="brandStoryMosaic" aria-label={t("Hình ảnh công ty", "公司影像")}>
-                  <img src="https://www.shintung-onspa.com/upload/2022/09/23/1663948034.jpg" alt={t("Nhà máy Shin Tung Việt Nam", "越南新東公司廠房")} />
-                  <img src="https://www.shintung-onspa.com/upload/2022/09/23/1663948051.jpg" alt={t("Đội ngũ Shin Tung Việt Nam", "越南新東公司團隊")} />
                 </div>
               </section>
               <section className="quickGrid">
@@ -1486,7 +1493,7 @@ export default function Home() {
           )}
           {view === "content" && (
             <ContentHub
-              key={`${contentStartTab}-${lang}`}
+              key={contentStartTab}
               initialTab={contentStartTab}
               posts={contentPosts}
               setPosts={setContentPosts}
@@ -1774,8 +1781,11 @@ function ContentHub({
   const [year, setYear] = useState("all");
   const [query, setQuery] = useState("");
   const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
+  const [selectedCertificate, setSelectedCertificate] = useState<(typeof certificates)[number] | null>(null);
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const coverUploadRef = useRef<HTMLInputElement | null>(null);
+  const bodyImageUploadRef = useRef<HTMLInputElement | null>(null);
   const emptyDraft = {
     title: "",
     date: new Date().toLocaleDateString("vi-VN"),
@@ -1783,24 +1793,64 @@ function ContentHub({
     image: "",
     summary: "",
     video: "",
+    contentImages: [] as string[],
   };
   const [draft, setDraft] = useState(emptyDraft);
   const years = [...new Set(posts.map((post) => post.year))].sort((a, b) => Number(b) - Number(a));
   const visiblePosts = posts
     .filter((post) => year === "all" || post.year === year)
     .filter((post) => `${post.title} ${post.summary}`.toLowerCase().includes(query.toLowerCase()))
-    .sort((a, b) => b.id - a.id);
+    .sort((a, b) => {
+      const parseDate = (value: string) => {
+        const [day, month, fullYear] = value.split("/").map(Number);
+        return Number.isFinite(day + month + fullYear) ? new Date(fullYear, month - 1, day).getTime() : 0;
+      };
+      return parseDate(b.createdAt || b.date) - parseDate(a.createdAt || a.date) || b.id - a.id;
+    });
   const startEdit = (post: BlogPost) => {
     setEditingId(post.id);
-    setDraft({ title: post.title, date: post.date, year: post.year, image: post.image, summary: post.summary, video: post.video || "" });
+    setDraft({ title: post.title, date: post.date, year: post.year, image: post.image, summary: post.summary, video: post.video || "", contentImages: post.images?.filter((image) => image !== post.image) || [] });
     setShowEditor(true);
   };
+  const normalizeVideoUrl = (value: string) => {
+    const url = value.trim();
+    const youtubeId = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([^?&#/]+)/i)?.[1];
+    return youtubeId ? `https://www.youtube.com/embed/${youtubeId}` : url;
+  };
+  const readImageUpload = (file: File, target: "cover" | "body") => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const source = new Image();
+      source.onload = () => {
+        const longestEdge = Math.max(source.naturalWidth, source.naturalHeight);
+        const scale = Math.min(1, 1600 / longestEdge);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(source.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(source.naturalHeight * scale));
+        canvas.getContext("2d")?.drawImage(source, 0, 0, canvas.width, canvas.height);
+        const image = canvas.toDataURL("image/jpeg", 0.84);
+        setDraft((current) => target === "cover"
+          ? { ...current, image }
+          : { ...current, contentImages: [...current.contentImages, image] });
+      };
+      source.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+  const setVideoFromButton = () => {
+    const value = window.prompt(t("Dán liên kết video YouTube hoặc liên kết nhúng an toàn", "輸入 YouTube 影片或安全嵌入連結"), draft.video);
+    if (value !== null) setDraft((current) => ({ ...current, video: normalizeVideoUrl(value) }));
+  };
   const saveDraft = () => {
-    if (!draft.title.trim() || !draft.summary.trim()) return;
+    if (!draft.title.trim() || !draft.summary.trim() || !draft.image) return;
+    const updatedAt = new Date().toLocaleString(lang === "vi" ? "vi-VN" : "zh-TW", { hour12: false });
+    const { contentImages, ...draftPost } = draft;
+    const images = [draft.image, ...contentImages];
     if (editingId) {
-      setPosts((items) => items.map((post) => post.id === editingId ? { ...post, ...draft, video: draft.video || undefined } : post));
+      setPosts((items) => items.map((post) => post.id === editingId ? { ...post, ...draftPost, images, updatedAt, video: draft.video || undefined } : post));
     } else {
-      setPosts((items) => [{ id: Math.max(0, ...items.map((post) => post.id)) + 1, ...draft, video: draft.video || undefined }, ...items]);
+      setPosts((items) => [{ id: Math.max(0, ...items.map((post) => post.id)) + 1, ...draftPost, images, createdAt: draft.date, updatedAt, video: draft.video || undefined }, ...items]);
     }
     setDraft(emptyDraft);
     setEditingId(null);
@@ -1811,7 +1861,7 @@ function ContentHub({
     <div className="contentHub">
       <section className="contentHero">
         <div>
-          <img src="/brand/onspa-logo.png" alt="ONSPA" />
+          <BrandLogos />
           <p className="eyebrow">SHIN TUNG VIETNAM CO., LTD · 越南新東公司</p>
           <h1>{t("Sản phẩm có chất lượng. Một thương hiệu có câu chuyện.", "產品有品質，品牌有故事。")}</h1>
           <p>{t("Nơi khách hàng hiểu thêm về con người, quy trình và cam kết đứng sau mỗi sản phẩm Shin Tung.", "讓客戶看見每一件新東產品背後的人、製程與承諾。")}</p>
@@ -1829,8 +1879,6 @@ function ContentHub({
           <section className="storyLead">
             <div className="storyCollage">
               <img src="https://www.shintung-onspa.com/upload/2022/09/23/1663948034.jpg" alt={t("Nhà máy Shin Tung", "新東公司廠房")} />
-              <img src="https://www.shintung-onspa.com/upload/2022/09/23/1663948051.jpg" alt={t("Đội ngũ Shin Tung", "新東團隊")} />
-              <span><b>25+</b>{t("năm kinh nghiệm", "年專業經驗")}</span>
             </div>
             <article>
               <p className="eyebrow">{t("CÂU CHUYỆN CỦA CHÚNG TÔI", "我們的故事")}</p>
@@ -1863,18 +1911,32 @@ function ContentHub({
                 <label><span>{t("Tiêu đề", "標題")}</span><input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
                 <label><span>{t("Ngày", "日期")}</span><input value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label>
                 <label><span>{t("Năm", "年份")}</span><input value={draft.year} onChange={(event) => setDraft({ ...draft, year: event.target.value })} /></label>
-                <label className="wide"><span>{t("URL hình ảnh", "圖片網址")}</span><input value={draft.image} onChange={(event) => setDraft({ ...draft, image: event.target.value })} /></label>
-                <label className="wide"><span>{t("URL video YouTube (embed)", "YouTube嵌入網址")}</span><input value={draft.video} onChange={(event) => setDraft({ ...draft, video: event.target.value })} /></label>
+                <div className="wide mediaField">
+                  <span>{t("Ảnh bìa bài viết", "文章封面圖片")}</span>
+                  <input ref={coverUploadRef} className="mediaFileInput" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImageUpload(file, "cover"); event.currentTarget.value = ""; }} />
+                  <div className="mediaControls"><button type="button" onClick={() => coverUploadRef.current?.click()}>▧ {t("Tải ảnh bìa", "上傳封面圖片")}</button>{draft.image && <button type="button" className="removeMedia" onClick={() => setDraft((current) => ({ ...current, image: "" }))}>× {t("Xóa", "移除")}</button>}</div>
+                  {draft.image && <img className="coverUploadPreview" src={draft.image} alt={t("Xem trước ảnh bìa", "封面預覽")} />}
+                </div>
+                <div className="wide mediaField">
+                  <span>{t("Hình ảnh trong nội dung", "文章內文圖片")}</span>
+                  <input ref={bodyImageUploadRef} className="mediaFileInput" type="file" accept="image/*" multiple onChange={(event) => { [...(event.target.files || [])].forEach((file) => readImageUpload(file, "body")); event.currentTarget.value = ""; }} />
+                  <div className="mediaControls"><button type="button" onClick={() => bodyImageUploadRef.current?.click()}>＋ {t("Thêm ảnh vào nội dung", "新增內文圖片")}</button><small>{t("Ảnh sẽ hiển thị dưới phần nội dung bài viết.", "圖片會顯示在文章文字下方。")}</small></div>
+                  {draft.contentImages.length > 0 && <div className="inlineUploadList">{draft.contentImages.map((image, index) => <figure key={`${image.slice(0, 24)}-${index}`}><img src={image} alt="" /><button type="button" onClick={() => setDraft((current) => ({ ...current, contentImages: current.contentImages.filter((_, itemIndex) => itemIndex !== index) }))}>×</button></figure>)}</div>}
+                </div>
+                <div className="wide mediaField">
+                  <span>{t("Video trong nội dung", "文章影片")}</span>
+                  <div className="mediaControls"><button type="button" onClick={setVideoFromButton}>▶ {draft.video ? t("Đổi liên kết video", "更換影片連結") : t("Thêm liên kết video", "新增影片連結")}</button>{draft.video && <><small>{t("Đã thêm video", "已加入影片")}</small><button type="button" className="removeMedia" onClick={() => setDraft((current) => ({ ...current, video: "" }))}>× {t("Xóa", "移除")}</button></>}</div>
+                </div>
                 <label className="wide"><span>{t("Nội dung tóm tắt", "內容摘要")}</span><textarea value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} /></label>
               </div>
-              <button className="saveContent" disabled={!draft.title.trim() || !draft.summary.trim()} onClick={saveDraft}>{t("Lưu & xuất bản", "儲存並發布")}</button>
+              <button className="saveContent" disabled={!draft.title.trim() || !draft.summary.trim() || !draft.image} onClick={saveDraft}>{t("Lưu & xuất bản", "儲存並發布")}</button>
             </section>
           )}
           <div className="newsGrid">
             {visiblePosts.map((post) => (
               <article className="newsCard" key={post.id}>
-                <button className="newsImage" onClick={() => setSelectedPost(post)}><img src={post.image} alt="" /><span>{post.year}</span>{post.video && <i>▶</i>}</button>
-                <div><small>{post.date} · {post.video ? t("Bài viết + video", "文章＋影片") : t("Tin tức", "消息")}</small><h3>{post.title}</h3><p>{post.summary}</p><div><button onClick={() => setSelectedPost(post)}>{t("Đọc bài", "閱讀文章")} →</button>{canManage && <><button className="edit" onClick={() => startEdit(post)}>✎</button><button className="delete" onClick={() => setPosts((items) => items.filter((item) => item.id !== post.id))}>×</button></>}</div></div>
+                <button className="newsImage" onClick={() => setSelectedPost(post)}><img src={post.image || "/brand/onspa-logo.png"} alt="" /><span>{post.year}</span>{post.video && <i>▶</i>}</button>
+                <div><small>{post.date}</small><button className="newsTitleButton" onClick={() => setSelectedPost(post)}><h3>{post.title}</h3></button><div className="newsCardFooter"><span className="newsTimes">{t("Tạo", "建立")} {post.createdAt || post.date}<br />{t("Sửa", "修改")} {post.updatedAt || post.date}</span>{canManage && <span className="newsAdminActions"><button className="edit" onClick={() => startEdit(post)}>✎</button><button className="delete" onClick={() => setPosts((items) => items.filter((item) => item.id !== post.id))}>×</button></span>}</div></div>
               </article>
             ))}
           </div>
@@ -1885,13 +1947,22 @@ function ContentHub({
         <div className="qualityPage">
           <section className="qualityIntro"><div><p className="eyebrow">{t("CHẤT LƯỢNG CÓ THỂ KIỂM CHỨNG", "看得見的品質")}</p><h2>{t("Không chỉ nói về độ bền. Chúng tôi đo lường nó.", "不只談耐用，我們實際測量。")}</h2><p>{t("Phòng kiểm nghiệm nội bộ hỗ trợ đánh giá vật liệu, độ bền kéo, xoắn, ăn mòn, nhiệt độ, áp lực, tuổi thọ và lão hóa UV.", "內部實驗室可進行材料、拉力、扭力、腐蝕、溫度、壓力、壽命及UV老化等測試。")}</p></div><div className="qualityStats"><span><b>7</b>{t("nhóm thiết bị", "組測試設備")}</span><span><b>ISO</b>{t("quản lý chất lượng", "品質管理")}</span><span><b>100%</b>{t("hồ sơ có chú thích", "文件具完整說明")}</span></div></section>
           <section><div className="qualitySectionHead"><p className="eyebrow">{t("PHÒNG KIỂM NGHIỆM", "品質實驗室")}</p><h2>{t("Thiết bị kiểm tra tại nhà máy", "廠內測試設備")}</h2></div><div className="machineGrid">{machines.map((machine) => <article key={machine.image}><img src={machine.image} alt={lang === "vi" ? machine.vi : machine.zh} /><div><h3>{lang === "vi" ? machine.vi : machine.zh}</h3><p>{lang === "vi" ? machine.detailVi : machine.detailZh}</p></div></article>)}</div></section>
-          <section><div className="qualitySectionHead"><p className="eyebrow">{t("CHỨNG NHẬN & BÁO CÁO", "證書與查證報告")}</p><h2>{t("Hồ sơ được nhận diện và ghi rõ thời hạn", "清楚標示名稱與有效期間")}</h2></div><div className="certificateGrid">{certificates.map((certificate) => <article key={certificate.image}><a href={certificate.image} target="_blank" rel="noreferrer"><img src={certificate.image} alt={certificate.name} /></a><div><span className={`certificateStatus ${certificate.status}`}>{certificate.status === "current" ? t("CÒN HIỆU LỰC", "有效") : certificate.status === "report" ? t("BÁO CÁO XÁC MINH", "查證報告") : t("HỒ SƠ LƯU TRỮ", "歷史文件")}</span><h3>{certificate.name}</h3><b>{certificate.period}</b><p>{lang === "vi" ? certificate.vi : certificate.zh}</p><a href={certificate.image} target="_blank" rel="noreferrer">{t("Xem ảnh gốc", "查看原始文件")} ↗</a></div></article>)}</div></section>
+          <section><div className="qualitySectionHead"><p className="eyebrow">{t("CHỨNG NHẬN & BÁO CÁO", "證書與查證報告")}</p><h2>{t("Hồ sơ được nhận diện và ghi rõ thời hạn", "清楚標示名稱與有效期間")}</h2></div><div className="certificateGrid">{certificates.map((certificate) => <article key={certificate.image}><button className="certificatePreview" onClick={() => setSelectedCertificate(certificate)}><img src={certificate.image} alt={certificate.name} /></button><div><span className={`certificateStatus ${certificate.status}`}>{certificate.status === "current" ? t("CÒN HIỆU LỰC", "有效") : certificate.status === "report" ? t("BÁO CÁO XÁC MINH", "查證報告") : t("HỒ SƠ LƯU TRỮ", "歷史文件")}</span><h3>{certificate.name}</h3><b>{certificate.period}</b><p>{lang === "vi" ? certificate.vi : certificate.zh}</p><button className="openCertificate" onClick={() => setSelectedCertificate(certificate)}>{t("Xem tài liệu", "查看文件")} ⤢</button></div></article>)}</div></section>
         </div>
       )}
 
       {selectedPost && (
         <div className="articleOverlay" role="dialog" aria-modal="true" aria-label={selectedPost.title} onClick={() => setSelectedPost(null)}>
-          <article className="articleViewer" onClick={(event) => event.stopPropagation()}><button className="closeArticle" onClick={() => setSelectedPost(null)}>×</button><img className="articleCover" src={selectedPost.image} alt="" /><div className="articleBody"><small>{selectedPost.date} · {selectedPost.year}</small><h2>{selectedPost.title}</h2><p>{selectedPost.summary}</p>{selectedPost.video && <iframe src={selectedPost.video} title={selectedPost.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />}{selectedPost.source && <a href={selectedPost.source} target="_blank" rel="noreferrer">{t("Xem tư liệu gốc", "查看原始資料")} ↗</a>}</div></article>
+          <article className="articleViewer" onClick={(event) => event.stopPropagation()}><button className="closeArticle" onClick={() => setSelectedPost(null)}>×</button><img className="articleCover" src={selectedPost.image || "/brand/onspa-logo.png"} alt="" /><div className="articleBody"><small>{selectedPost.date} · {selectedPost.year}</small><h2>{selectedPost.title}</h2><div className="legacyArticleText">{(selectedPost.content || selectedPost.summary).split(/\n{2,}/).filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>{selectedPost.images?.filter((image) => image !== selectedPost.image).map((image, index) => <img className="articleInlineImage" src={image} alt={`${selectedPost.title} ${index + 1}`} key={`${image}-${index}`} />)}{(selectedPost.videos?.length ? selectedPost.videos : selectedPost.video ? [selectedPost.video] : []).map((video, index) => <iframe src={video} title={`${selectedPost.title} ${index + 1}`} key={`${video}-${index}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />)}</div></article>
+        </div>
+      )}
+      {selectedCertificate && (
+        <div className="certificateOverlay" role="dialog" aria-modal="true" aria-label={selectedCertificate.name} onClick={() => setSelectedCertificate(null)}>
+          <figure onClick={(event) => event.stopPropagation()}>
+            <button className="closeCertificate" onClick={() => setSelectedCertificate(null)} aria-label={t("Đóng", "關閉")}>×</button>
+            <img src={selectedCertificate.image} alt={selectedCertificate.name} />
+            <figcaption><strong>{selectedCertificate.name}</strong><span>{selectedCertificate.period}</span></figcaption>
+          </figure>
         </div>
       )}
     </div>

@@ -1,3 +1,5 @@
+import legacyBlogContent from "./legacyBlogContent.json";
+
 export type BlogPost = {
   id: number;
   year: string;
@@ -5,6 +7,11 @@ export type BlogPost = {
   title: string;
   image: string;
   summary: string;
+  content?: string;
+  images?: string[];
+  videos?: string[];
+  createdAt?: string;
+  updatedAt?: string;
   video?: string;
   source?: string;
 };
@@ -100,25 +107,30 @@ export const legacyBlogPosts: BlogPost[] = legacyRows.map(
     summary:
       postSummaries[index + 1] ||
       `Tư liệu lưu trữ của Shin Tung Việt Nam về ${title.toLocaleLowerCase("vi-VN")}.`,
+    content: legacyBlogContent[index]?.content || postSummaries[index + 1] || "",
+    images: legacyBlogContent[index]?.images || [],
+    videos: legacyBlogContent[index]?.videos || (video ? [video] : []),
+    createdAt: date,
+    updatedAt: date,
     video,
     source: `https://www.shintung-onspa.com/index.php?do=blog&tp=${section}&id=${sourceId}&language=vie`,
   }),
 );
 
 export const machines = [
-  { image: "/quality/machines/material-analysis.jpg", vi: "Phân tích vật liệu & kiểm tra cơ lý", zh: "材料分析與物性檢測", detailVi: "Máy quang phổ EDXRF EDX 2800B, thiết bị đo khối lượng, độ cứng và kích thước.", detailZh: "EDX 2800B EDXRF分光儀、質量、硬度與尺寸量測設備。" },
-  { image: "/quality/machines/tensile-torsion.jpg", vi: "Máy thử kéo & xoắn", zh: "拉力與扭力測試機", detailVi: "Kiểm tra độ bền kéo, độ giãn dài, lực xoắn và khả năng chịu tải của dây và phụ kiện.", detailZh: "檢測軟管與配件的拉伸、延伸、扭力及承載能力。" },
-  { image: "/quality/machines/salt-spray.jpg", vi: "Máy thử phun sương muối", zh: "鹽霧試驗機", detailVi: "Đánh giá khả năng chống ăn mòn của bề mặt kim loại, lớp mạ và phụ kiện.", detailZh: "評估金屬表面、電鍍層與配件的耐腐蝕性能。" },
-  { image: "/quality/machines/temperature-soak.jpg", vi: "Bể ngâm nhiệt độ", zh: "溫度浸泡試驗機", detailVi: "Thử nghiệm ngâm ở nhiệt độ kiểm soát để đánh giá độ ổn định của vật liệu và dây.", detailZh: "在受控溫度下浸泡，評估材料與軟管的穩定性。" },
-  { image: "/quality/machines/environment-chamber.jpg", vi: "Hệ thống thử nhiệt độ & môi trường", zh: "溫度與環境試驗設備", detailVi: "Mô phỏng điều kiện nóng, lạnh và môi trường để kiểm tra độ bền sản phẩm.", detailZh: "模擬高低溫及環境條件，驗證產品耐久度。" },
-  { image: "/quality/machines/pulse-pressure.jpg", vi: "Máy thử xung & áp lực ống trong", zh: "脈衝與內管壓力試驗機", detailVi: "Kiểm tra chu kỳ áp lực, áp lực nước và độ kín của ống dẫn.", detailZh: "檢測壓力循環、水壓及管路密封性能。" },
-  { image: "/quality/machines/life-uv.jpg", vi: "Máy thử tuổi thọ vòi xịt & UV", zh: "沖洗器壽命與UV試驗機", detailVi: "Kiểm tra số chu kỳ hoạt động, độ kín và khả năng lão hóa dưới tia UV.", detailZh: "檢測操作循環、密封性能及紫外線老化耐受度。" },
+  { image: "/quality/machines/material-analysis-clean.png", vi: "Máy kiểm tra kim loại & cơ tính", zh: "金屬與物性檢測設備", detailVi: "Kiểm tra thành phần kim loại, khối lượng, độ cứng, đường kính dây và kích thước vật liệu.", detailZh: "檢測金屬成分、質量、硬度、線徑與材料尺寸。" },
+  { image: "/quality/machines/tensile-torsion-clean.png", vi: "Máy kiểm tra kéo dây & máy thử xoắn", zh: "線材拉力與扭轉試驗機", detailVi: "Kiểm tra độ bền kéo, độ giãn dài, lực xoắn và khả năng chịu tải của dây và phụ kiện.", detailZh: "檢測線材與配件的拉伸、延伸、扭轉及承載能力。" },
+  { image: "/quality/machines/salt-spray-clean.png", vi: "Máy kiểm tra oxy hóa (phun sương muối)", zh: "氧化與鹽霧試驗機", detailVi: "Đánh giá khả năng chống oxy hóa và ăn mòn của bề mặt kim loại, lớp mạ và phụ kiện.", detailZh: "評估金屬表面、電鍍層與配件的抗氧化及耐腐蝕性能。" },
+  { image: "/quality/machines/temperature-soak-clean.png", vi: "Tắm thử chịu nóng", zh: "耐熱浸泡試驗槽", detailVi: "Thử nghiệm ngâm nước nóng ở nhiệt độ kiểm soát để đánh giá độ ổn định của vật liệu và dây.", detailZh: "在受控熱水溫度下浸泡，評估材料與軟管的穩定性。" },
+  { image: "/quality/machines/environment-chamber-clean.png", vi: "Bàn thử nước nóng & buồng thử nhiệt độ", zh: "熱水測試台與溫度環境試驗箱", detailVi: "Thử nước nóng, nhiệt độ phòng và mô phỏng điều kiện môi trường để kiểm tra độ bền sản phẩm.", detailZh: "進行熱水、室溫及環境模擬試驗，驗證產品耐久度。" },
+  { image: "/quality/machines/pulse-pressure-clean.png", vi: "Máy kiểm tra áp lực nước & xung lực dây", zh: "水壓與軟管脈衝試驗機", detailVi: "Kiểm tra áp lực nước, chu kỳ xung lực và độ kín của dây dẫn.", detailZh: "檢測水壓、軟管脈衝循環與密封性能。" },
+  { image: "/quality/machines/life-uv-clean.png", vi: "Máy kiểm tra áp suất nước, tuổi thọ & tủ lão hóa UV", zh: "水壓與壽命試驗機、UV老化試驗箱", detailVi: "Kiểm tra áp suất nước, số chu kỳ hoạt động, độ kín và khả năng lão hóa dưới tia UV.", detailZh: "檢測水壓、操作循環、密封性能及紫外線老化耐受度。" },
 ];
 
 export const certificates = [
-  { image: "/quality/certificates/iso-9001-2024-2027.jpg", name: "ISO 9001:2015 · SGS", status: "current", period: "05/03/2024 – 05/03/2027", vi: "Hệ thống quản lý chất lượng cho sản xuất, lắp ráp và gia công sản phẩm vệ sinh, làm vườn, thiết bị bơm và đầu nối công nghiệp.", zh: "品質管理系統，涵蓋衛浴、園藝、泵浦設備與工業接頭的製造、組裝及加工。" },
-  { image: "/quality/certificates/ghg-verification-2023.jpg", name: "ISO 14064-1:2018 · Bureau Veritas", status: "report", period: "Báo cáo phát thải năm 2023", vi: "Báo cáo xác minh độc lập phát thải khí nhà kính, thực hiện theo ISO 14064-1:2018 và xác minh theo ISO 14064-3:2019.", zh: "2023年度溫室氣體排放獨立查證報告，依ISO 14064-1:2018盤查並按ISO 14064-3:2019查證。" },
-  { image: "/quality/certificates/iso-14001-2023-2026.jpg", name: "ISO 14001:2015 · SGS", status: "archive", period: "06/01/2023 – 06/01/2026", vi: "Chứng nhận hệ thống quản lý môi trường. Bản trong ảnh đã hết thời hạn và được hiển thị như hồ sơ lưu trữ.", zh: "環境管理系統證書。照片版本已到期，現以歷史紀錄展示。" },
-  { image: "/quality/certificates/iso-9001-2021-2024.jpg", name: "ISO 9001:2015 · SGS", status: "archive", period: "05/03/2021 – 05/03/2024", vi: "Phiên bản chứng nhận ISO 9001:2015 trước đây, lưu lại để thể hiện quá trình duy trì hệ thống chất lượng.", zh: "前期ISO 9001:2015證書，作為持續維護品質系統的歷史紀錄。" },
-  { image: "/quality/certificates/iso-9001-2000-archive.jpg", name: "ISO 9001:2000 · QUACERT", status: "archive", period: "17/06/2002 – 16/06/2005", vi: "Chứng nhận lịch sử của Công ty TNHH Tân Đông cho hoạt động lắp ráp và cung ứng công tắc phao.", zh: "越南新東公司早期浮球開關組裝與供應之歷史認證。" },
+  { image: "/quality/certificates/iso-9001-2024-2027-scan.png", name: "ISO 9001:2015 · SGS", status: "current", period: "05/03/2024 – 05/03/2027", vi: "Hệ thống quản lý chất lượng cho sản xuất, lắp ráp và gia công sản phẩm vệ sinh, làm vườn, thiết bị bơm và đầu nối công nghiệp.", zh: "品質管理系統，涵蓋衛浴、園藝、泵浦設備與工業接頭的製造、組裝及加工。" },
+  { image: "/quality/certificates/ghg-verification-2023-scan.png", name: "ISO 14064-1:2018 · Bureau Veritas", status: "report", period: "Báo cáo phát thải năm 2023", vi: "Báo cáo xác minh độc lập phát thải khí nhà kính, thực hiện theo ISO 14064-1:2018 và xác minh theo ISO 14064-3:2019.", zh: "2023年度溫室氣體排放獨立查證報告，依ISO 14064-1:2018盤查並按ISO 14064-3:2019查證。" },
+  { image: "/quality/certificates/iso-14001-2023-2026-scan.png", name: "ISO 14001:2015 · SGS", status: "archive", period: "06/01/2023 – 06/01/2026", vi: "Chứng nhận hệ thống quản lý môi trường. Bản trong ảnh đã hết thời hạn và được hiển thị như hồ sơ lưu trữ.", zh: "環境管理系統證書。照片版本已到期，現以歷史紀錄展示。" },
+  { image: "/quality/certificates/iso-9001-2021-2024-scan.png", name: "ISO 9001:2015 · SGS", status: "archive", period: "05/03/2021 – 05/03/2024", vi: "Phiên bản chứng nhận ISO 9001:2015 trước đây, lưu lại để thể hiện quá trình duy trì hệ thống chất lượng.", zh: "前期ISO 9001:2015證書，作為持續維護品質系統的歷史紀錄。" },
+  { image: "/quality/certificates/iso-9001-2000-archive-scan.png", name: "ISO 9001:2000 · QUACERT", status: "archive", period: "17/06/2002 – 16/06/2005", vi: "Chứng nhận lịch sử của Công ty TNHH Tân Đông cho hoạt động lắp ráp và cung ứng công tắc phao.", zh: "越南新東公司早期浮球開關組裝與供應之歷史認證。" },
 ];
