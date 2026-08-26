@@ -41,6 +41,11 @@ next-env.d.ts
 /outputs/
 /work/
 
+# Local preview and generated review artifacts
+/tmp/
+.vite-preview*.log
+node_modules.vercel-stalled-20260824/
+
 # public repository safety
 *.tsbuildinfo
 .openai/hosting.json
