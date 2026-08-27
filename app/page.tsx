@@ -9,7 +9,7 @@ import {
 } from "./companyContent";
 
 type Tier = "large" | "medium" | "small";
-type UserRole = "dealer" | "admin" | "warehouse" | "delivery";
+type UserRole = "visitor" | "dealer" | "admin" | "warehouse" | "delivery";
 type AdminPermission = "orders" | "customers" | "tiers" | "discounts" | "products";
 type PriceStage = { minQty: number; percent: number };
 type ProductSpecification = { vi: string; zh: string };
@@ -186,6 +186,15 @@ const initialCustomers: Customer[] = [
     role: "delivery",
   },
 ];
+const visitorAccount: Customer = {
+  username: "visitor",
+  password: "",
+  name: "Shin Tung Visitor",
+  tier: "small",
+  address: "",
+  bestCategories: [],
+  role: "visitor",
+};
 const initialOrders: Order[] = [
   {
     id: "#TD-260812-08",
@@ -862,10 +871,21 @@ export default function Home() {
   const changeQty = (id: number, n: number) =>
     setQty((q) => ({ ...q, [id]: Math.max(1, Math.floor(n || 1)) }));
   const add = (id: number, n?: number) => {
+    if (user?.role === "visitor") return;
     const amount = n || qty[id] || 1;
     setCart((c) => ({ ...c, [id]: (c[id] || 0) + amount }));
     setToast(t("Đã thêm vào đơn hàng", "已加入訂單"));
     setTimeout(() => setToast(""), 1500);
+  };
+  const enterVisitorMode = () => {
+    setUser(visitorAccount);
+    setAdmin(false);
+    setView("home");
+    setCategory("all");
+    setSearch("");
+    setCart({});
+    setEditingOrderId(null);
+    setShowAccountMenu(false);
   };
   const quickEnter = (targetUsername: string, openAdmin = false) => {
     const account = customers.find((customer) => customer.username === targetUsername);
@@ -948,6 +968,16 @@ export default function Home() {
               <b>SHIN TUNG VIETNAM CO., LTD</b>
               <small>{t("CÔNG TY TNHH SHIN TUNG VIỆT NAM", "越南新東公司")}</small>
             </div>
+            <section className="visitorEntry">
+              <span aria-hidden="true">◎</span>
+              <div>
+                <b>{t("Tham quan website", "訪客參觀")}</b>
+                <small>{t("Không cần đăng nhập · Xem công ty, hình ảnh, quy cách và số lượng mỗi thùng", "免登入・瀏覽公司介紹、產品圖片、規格與每箱入數")}</small>
+              </div>
+              <button type="button" onClick={enterVisitorMode}>
+                {t("Vào chế độ tham quan", "進入訪客模式")} →
+              </button>
+            </section>
             <section className="roleQuickAccess">
               <b>{t("Truy cập nhanh theo vai trò", "依身分快速進入")}</b>
               <div>
@@ -1012,8 +1042,11 @@ export default function Home() {
     );
 
   const tierLabel = t(tierInfo[user.tier].vi, tierInfo[user.tier].zh);
+  const isVisitor = user.role === "visitor";
   const accountRoleLabel =
-    user.role === "admin"
+    isVisitor
+      ? t("Khách tham quan", "訪客")
+      : user.role === "admin"
       ? t("Quản trị viên", "管理者")
       : user.role === "warehouse"
         ? t("Nhân viên kho", "倉庫人員")
@@ -1050,45 +1083,55 @@ export default function Home() {
           >
             {p.variants.map((x) => (
               <option value={x.id} key={x.id}>
-                {lang === "vi" ? x.label : x.labelZh} · {fmt(x.base)}
+                {lang === "vi" ? x.label : x.labelZh}
+                {!isVisitor && <> · {fmt(x.base)}</>}
               </option>
             ))}
           </select>
-          <div className="listPrice">
-            <span>{t("Giá niêm yết theo quy cách", "規格牌價")}</span>
-            <del>{fmt(v.base)}</del>
-          </div>
-          <div className="priceRow">
-            <div>
-              <b>{fmt(price(p, categoryQty))}</b>
-              <small>
-                {t("Chiết khấu", "折扣")} {100 - pc}% ·{" "}
-                {best
-                  ? t("giá thấp nhất theo username", "Username專屬最低價")
-                  : t("gộp số lượng cùng nhóm", "同類別合併數量")}
-              </small>
-            </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                add(p.id, n);
-              }}
-            >
-              ＋
-            </button>
-          </div>
+          {!isVisitor && (
+            <>
+              <div className="listPrice">
+                <span>{t("Giá niêm yết theo quy cách", "規格牌價")}</span>
+                <del>{fmt(v.base)}</del>
+              </div>
+              <div className="priceRow">
+                <div>
+                  <b>{fmt(price(p, categoryQty))}</b>
+                  <small>
+                    {t("Chiết khấu", "折扣")} {100 - pc}% ·{" "}
+                    {best
+                      ? t("giá thấp nhất theo username", "Username專屬最低價")
+                      : t("gộp số lượng cùng nhóm", "同類別合併數量")}
+                  </small>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    add(p.id, n);
+                  }}
+                >
+                  ＋
+                </button>
+              </div>
+            </>
+          )}
           <div className="packHint">
             {t("Quy cách này: 1 thùng", "此規格：1箱")} = {packQty} pcs
           </div>
-          {!best && next && (
+          {isVisitor && (
+            <div className="visitorProductHint">
+              {t("Xem hình ảnh và thông số sản phẩm", "查看產品圖片與規格")}
+            </div>
+          )}
+          {!isVisitor && !best && next && (
             <div className="nextPrice">
               {t("Cùng nhóm mua thêm", "同類別再買")} {next.minQty - categoryQty} pcs → {next.percent}%
             </div>
           )}
-          <div className="categoryQtyHint">
+          {!isVisitor && <div className="categoryQtyHint">
             {t("Tổng nhóm sau khi thêm", "加入後類別合計")}：{categoryQty} pcs · {t("chiết khấu", "折扣")} {100 - pc}%
-          </div>
-          <div className="cardQty" onClick={(e) => e.stopPropagation()}>
+          </div>}
+          {!isVisitor && <div className="cardQty" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => changeQty(p.id, n - 1)}>−</button>
             <input
               type="number"
@@ -1103,7 +1146,7 @@ export default function Home() {
             >
               {t("1 thùng", "1箱")} · {packQty}
             </button>
-          </div>
+          </div>}
         </div>
       </article>
     );
@@ -1146,7 +1189,7 @@ export default function Home() {
               </span>
             </button>
           )}
-          {!admin && (
+          {!admin && !isVisitor && (
             <button className="myOrdersBtn" onClick={() => setView("account")}>
               ▤ <span>{t("Đơn hàng của tôi", "我的訂單")}</span>
               {userOrders.some((o) => ["confirmed", "preparing"].includes(o.status)) && <i>!</i>}
@@ -1168,15 +1211,17 @@ export default function Home() {
                   <b>{user.name}</b>
                   <small>@{user.username}</small>
                 </header>
-                <button
-                  onClick={() => {
-                    setAdmin(false);
-                    setView("account");
-                    setShowAccountMenu(false);
-                  }}
-                >
-                  <span>●</span>{t("Thông tin tài khoản", "帳戶資訊")}
-                </button>
+                {!isVisitor && (
+                  <button
+                    onClick={() => {
+                      setAdmin(false);
+                      setView("account");
+                      setShowAccountMenu(false);
+                    }}
+                  >
+                    <span>●</span>{t("Thông tin tài khoản", "帳戶資訊")}
+                  </button>
+                )}
                 <button className="logout" onClick={logout}>
                   <span>↪</span>{t("Đăng xuất", "登出")}
                 </button>
@@ -1232,18 +1277,19 @@ export default function Home() {
             <div className="page homePage">
               <section className="welcome">
                 <div>
-                  <p>{t("Xin chào,", "您好，")}</p>
-                  <h1>{user.name}</h1>
+                  <p>{isVisitor ? t("Chào mừng đến với", "歡迎認識") : t("Xin chào,", "您好，")}</p>
+                  <h1>{isVisitor ? t("SHIN TUNG VIETNAM", "越南新東公司") : user.name}</h1>
                   <span>
-                    {t("Đã áp dụng bảng giá", "已套用價格層級")} ·{" "}
-                    <b>{tierLabel}</b>
+                    {isVisitor
+                      ? t("Chế độ tham quan · Giá, chiết khấu và đặt hàng được ẩn", "訪客模式・不顯示價格、折扣與訂貨功能")
+                      : <>{t("Đã áp dụng bảng giá", "已套用價格層級")} · <b>{tierLabel}</b></>}
                   </span>
                 </div>
-                <button onClick={() => setView("cart")}>
+                {!isVisitor && <button onClick={() => setView("cart")}>
                   {t("Đơn đang soạn", "目前訂單")}{" "}
                   <strong>{cartItems.length}</strong>
                   <small>{fmt(total)}</small>
-                </button>
+                </button>}
               </section>
               <section className="brandStoryHero">
                 <div className="brandStoryCopy">
@@ -1257,8 +1303,8 @@ export default function Home() {
                   </div>
                 </div>
               </section>
-              <section className="quickGrid">
-                <button
+              <section className={isVisitor ? "quickGrid visitorQuickGrid" : "quickGrid"}>
+                {!isVisitor && <button
                   className="quick orange"
                   onClick={() => setView("products")}
                 >
@@ -1269,7 +1315,7 @@ export default function Home() {
                       {t("Chọn loại hàng và số lượng", "選擇分類與數量")}
                     </small>
                   </span>
-                </button>
+                </button>}
                 <button className="quick" onClick={() => setView("products")}>
                   <span className="icon">▦</span>
                   <span>
@@ -1279,7 +1325,7 @@ export default function Home() {
                     </small>
                   </span>
                 </button>
-                <button
+                {!isVisitor && <button
                   className="quick"
                   onClick={() => {
                     add(1, 100);
@@ -1291,7 +1337,7 @@ export default function Home() {
                     <b>{t("Mua lại", "再次購買")}</b>
                     <small>{t("Từ đơn gần nhất", "從最近訂單加入")}</small>
                   </span>
-                </button>
+                </button>}
                 <button className="quick" onClick={() => { setContentStartTab("news"); setView("content"); }}>
                   <span className="icon">▶</span>
                   <span>
@@ -1335,9 +1381,9 @@ export default function Home() {
                 <div className="sectionHead">
                   <div>
                     <p className="eyebrow">
-                      {t("SẢN PHẨM THƯỜNG MUA", "常購產品")}
+                      {isVisitor ? t("SẢN PHẨM TIÊU BIỂU", "精選產品") : t("SẢN PHẨM THƯỜNG MUA", "常購產品")}
                     </p>
-                    <h2>{t("Đặt lại nhanh", "快速再訂")}</h2>
+                    <h2>{isVisitor ? t("Khám phá sản phẩm Shin Tung", "認識新東產品") : t("Đặt lại nhanh", "快速再訂")}</h2>
                   </div>
                 </div>
                 <div className="products">
@@ -1354,11 +1400,16 @@ export default function Home() {
                 <p className="eyebrow">CATALOGUE 2026</p>
                 <h1>{t("Sản phẩm Tân Đông", "新東產品")}</h1>
                 <p>
-                  {tierLabel} ·{" "}
-                  {t(
-                    "Số lượng mọi mã và kích cỡ cùng nhóm được gộp để tính chiết khấu.",
-                    "同類別不同產品與尺寸會合併數量計算折扣。",
-                  )}
+                  {isVisitor
+                    ? t(
+                        "Xem hình ảnh, quy cách kỹ thuật và số lượng đóng thùng.",
+                        "瀏覽產品圖片、技術規格與每箱入數。",
+                      )
+                    : <>{tierLabel} ·{" "}
+                        {t(
+                          "Số lượng mọi mã và kích cỡ cùng nhóm được gộp để tính chiết khấu.",
+                          "同類別不同產品與尺寸會合併數量計算折扣。",
+                        )}</>}
                 </p>
               </div>
               <div className="mobileSearch">
@@ -1385,7 +1436,7 @@ export default function Home() {
                   </button>
                 ))}
               </div>
-              {category !== "all" &&
+              {!isVisitor && category !== "all" &&
                 (() => {
                   const g = catalogueGroups.find((x) => x.vi === category);
                   if (!g) return null;
@@ -1433,7 +1484,7 @@ export default function Home() {
               </div>
             </div>
           )}
-          {view === "cart" && (
+          {!isVisitor && view === "cart" && (
             <Cart
               items={cartItems}
               total={total}
@@ -1498,6 +1549,7 @@ export default function Home() {
               posts={contentPosts}
               setPosts={setContentPosts}
               canManage={user.role === "admin"}
+              canOrder={!isVisitor}
               lang={lang}
               t={t}
               orderNow={() => setView("products")}
@@ -1529,7 +1581,7 @@ export default function Home() {
               </div>
             </div>
           )}
-          {view === "account" && (
+          {!isVisitor && view === "account" && (
             <div className={`page account ${user.role === "admin" ? "adminAccount" : ""}`}>
               <div className="accountHero">
                 <div className="bigAvatar">{user.name.slice(0, 2)}</div>
@@ -1664,7 +1716,7 @@ export default function Home() {
           )}
         </>
       )}
-      {!admin && cartItems.length > 0 && view !== "cart" && (
+      {!admin && !isVisitor && cartItems.length > 0 && view !== "cart" && (
         <aside className={`miniCart ${miniCartExpanded ? "expanded" : "collapsed"}`}>
           <button
             className="miniCartToggle"
@@ -1704,14 +1756,18 @@ export default function Home() {
           </div>
         </aside>
       )}
-      {!admin && <nav className="bottomNav">
-        {[
+      {!admin && <nav className={isVisitor ? "bottomNav visitorNav" : "bottomNav"}>
+        {(isVisitor ? [
+          ["⌂", "home", "Trang chủ", "首頁"],
+          ["▦", "products", "Sản phẩm", "產品"],
+          ["●", "content", "Giới thiệu", "認識新東"],
+        ] : [
           ["⌂", "home", "Trang chủ", "首頁"],
           ["▦", "products", "Sản phẩm", "產品"],
           ["＋", "cart", "Đặt hàng", "訂貨"],
           ["●", "content", "Tin tức", "消息"],
           ["●", "account", "Của tôi", "我的"],
-        ].map((n) => (
+        ]).map((n) => (
           <button
             key={n[1]}
             className={view === n[1] ? "active" : ""}
@@ -1746,6 +1802,7 @@ export default function Home() {
           stages={categoryStages[selected.categoryEn]}
           best={hasBestPrice(selected)}
           tier={tierLabel}
+          isVisitor={isVisitor}
           lang={lang}
           t={t}
           close={() => setSelected(null)}
@@ -1765,6 +1822,7 @@ function ContentHub({
   posts,
   setPosts,
   canManage,
+  canOrder,
   lang,
   t,
   orderNow,
@@ -1773,6 +1831,7 @@ function ContentHub({
   posts: BlogPost[];
   setPosts: React.Dispatch<React.SetStateAction<BlogPost[]>>;
   canManage: boolean;
+  canOrder: boolean;
   lang: "vi" | "zh";
   t: (vi: string, zh: string) => string;
   orderNow: () => void;
@@ -1941,7 +2000,7 @@ function ContentHub({
           <h1>{t("Sản phẩm có chất lượng. Một thương hiệu có câu chuyện.", "產品有品質，品牌有故事。")}</h1>
           <p>{t("Nơi khách hàng hiểu thêm về con người, quy trình và cam kết đứng sau mỗi sản phẩm Shin Tung.", "讓客戶看見每一件新東產品背後的人、製程與承諾。")}</p>
         </div>
-        <button onClick={orderNow}>{t("Tiếp tục đặt hàng", "繼續訂貨")} →</button>
+        {canOrder && <button onClick={orderNow}>{t("Tiếp tục đặt hàng", "繼續訂貨")} →</button>}
       </section>
       <nav className="contentTabs" aria-label={t("Nội dung công ty", "公司內容")}>
         <button className={tab === "story" ? "active" : ""} onClick={() => setTab("story")}>⌂ {t("Câu chuyện", "品牌故事")}</button>
@@ -2210,6 +2269,7 @@ function ProductModal({
   stages,
   best,
   tier,
+  isVisitor,
   lang,
   t,
   close,
@@ -2227,6 +2287,7 @@ function ProductModal({
   stages: PriceStage[];
   best: boolean;
   tier: string;
+  isVisitor: boolean;
   lang: "vi" | "zh";
   t: (a: string, b: string) => string;
   close: () => void;
@@ -2256,11 +2317,18 @@ function ProductModal({
           >
             {p.variants.map((v) => (
               <option value={v.id} key={v.id}>
-                {lang === "vi" ? v.label : v.labelZh} · {fmt(v.base)}
+                {lang === "vi" ? v.label : v.labelZh}
+                {!isVisitor && <> · {fmt(v.base)}</>}
               </option>
             ))}
           </select>
         </label>
+        {isVisitor ? (
+          <div className="visitorModalNotice">
+            <b>{t("Thông tin sản phẩm dành cho khách tham quan", "訪客產品資訊")}</b>
+            <span>{t("Giá, chiết khấu và chức năng đặt hàng chỉ hiển thị sau khi đăng nhập bằng tài khoản khách hàng.", "價格、折扣與訂貨功能僅供客戶帳號登入後使用。")}</span>
+          </div>
+        ) : <>
         <div className="modalPricing">
           <div>
             <span>{t("Giá niêm yết quy cách", "此規格牌價")}</span>
@@ -2353,7 +2421,8 @@ function ProductModal({
             <dd>{fmt(unit * n)}</dd>
           </div>
         </dl>
-        <details className="productSpecifications">
+        </>}
+        <details className="productSpecifications" open={isVisitor}>
           <summary>{t("Xem thông số sản phẩm", "查看產品規格")} ＋</summary>
           <ul>
             {p.specifications.map((specification, index) => (
@@ -2362,9 +2431,9 @@ function ProductModal({
             <li>1 {t("thùng", "箱")} = {packQty} pcs</li>
           </ul>
         </details>
-        <button className="primary" onClick={add}>
+        {!isVisitor && <button className="primary" onClick={add}>
           {t("Thêm vào đơn hàng", "加入訂單")} <span>＋</span>
-        </button>
+        </button>}
       </section>
     </div>
   );

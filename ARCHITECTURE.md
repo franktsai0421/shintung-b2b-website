@@ -22,7 +22,7 @@ Cloudflare request
 | Area | Primary files | Notes and dependencies |
 | --- | --- | --- |
 | Root page and metadata | `app/layout.tsx`, `app/page.tsx` | `lang="vi"`; development preview metadata is covered by an automated test. |
-| Login and account state | `app/page.tsx` | Client-side demo login. Do not treat as production authentication. |
+| Login and account state | `app/page.tsx` | Client-side demo login plus a no-login visitor entry. Do not treat as production authentication. |
 | Catalogue and product variants | `app/page.tsx` | Prototype product data and external image URLs are defined inline. |
 | Pricing and customer entitlement | `app/page.tsx` | `hasBestPrice`, `stageFor`, `percent`, and `price` are the critical calculation path. Read `BUSINESS_RULES.md`. |
 | Cart and checkout | `app/page.tsx` | Uses the same selected variant and pricing functions as catalogue surfaces. |
@@ -60,6 +60,7 @@ Any change to this flow is pricing-sensitive and requires the end-to-end checks 
 - `db/` is an available infrastructure seam, not an active production data source.
 - `worker/index.ts` is the Cloudflare boundary. Changes can affect every route and image request.
 - External product images are runtime dependencies. URL changes can affect catalogue, modal, cart, history, and Admin displays.
+- Visitor visibility is enforced by conditional rendering in the client component. It hides commercial and ordering surfaces but does not remove pricing from the browser-delivered prototype data.
 - `.openai/hosting.json` is optional, environment-specific, and intentionally ignored. Never commit secrets or production identifiers.
 
 ## Known architecture risks
