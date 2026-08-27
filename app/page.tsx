@@ -945,8 +945,8 @@ export default function Home() {
           >
             <div className="mobileBrandLogos"><BrandLogos /></div>
             <div className="miniLogo">
-              <b>TÂN ĐÔNG</b>
-              <small>PRO</small>
+              <b>SHIN TUNG VIETNAM CO., LTD</b>
+              <small>{t("CÔNG TY TNHH SHIN TUNG VIỆT NAM", "越南新東公司")}</small>
             </div>
             <section className="roleQuickAccess">
               <b>{t("Truy cập nhanh theo vai trò", "依身分快速進入")}</b>
@@ -1832,6 +1832,7 @@ function ContentHub({
       part.startsWith("**") && part.endsWith("**") ? <strong key={index}>{part.slice(2, -2)}</strong> : part,
     );
     return value.split(/\n+/).filter(Boolean).map((line, index) => {
+      if (/^https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\//i.test(line.trim())) return null;
       if (line.startsWith("## ")) return <h3 key={index}>{renderBold(line.slice(3))}</h3>;
       if (line.startsWith("- ")) return <ul key={index}><li>{renderBold(line.slice(2))}</li></ul>;
       if (line.startsWith("> ")) return <blockquote key={index}>{renderBold(line.slice(2))}</blockquote>;
@@ -1843,6 +1844,7 @@ function ContentHub({
     const youtubeId = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([^?&#/]+)/i)?.[1];
     return youtubeId ? `https://www.youtube.com/embed/${youtubeId}` : url;
   };
+  const findYoutubeUrl = (value: string) => value.match(/https?:\/\/(?:www\.)?(?:youtu\.be\/[^\s]+|youtube\.com\/(?:watch\?[^\s]*v=|embed\/|shorts\/)[^\s]+)/i)?.[0] || "";
   const readImageUpload = (file: File, target: "cover" | "body") => {
     if (!file.type.startsWith("image/")) return;
     const reader = new FileReader();
@@ -1864,9 +1866,21 @@ function ContentHub({
     };
     reader.readAsDataURL(file);
   };
-  const setVideoFromButton = () => {
-    const value = window.prompt(t("Dán liên kết video YouTube hoặc liên kết nhúng an toàn", "輸入 YouTube 影片或安全嵌入連結"), draft.video);
-    if (value !== null) setDraft((current) => ({ ...current, video: normalizeVideoUrl(value) }));
+  const updateArticleContent = (content: string) => {
+    const youtubeUrl = findYoutubeUrl(content);
+    setDraft((current) => ({
+      ...current,
+      content,
+      video: youtubeUrl ? normalizeVideoUrl(youtubeUrl) : editingId ? current.video : "",
+    }));
+  };
+  const pasteArticleMedia = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = Array.from(event.clipboardData.items)
+      .map((item) => item.kind === "file" ? item.getAsFile() : null)
+      .filter((file): file is File => Boolean(file?.type.startsWith("image/")));
+    if (!imageFiles.length) return;
+    event.preventDefault();
+    imageFiles.forEach((file) => readImageUpload(file, "body"));
   };
   const saveDraft = () => {
     if (!draft.title.trim() || !draft.content.trim() || !draft.image) return;
@@ -1874,10 +1888,12 @@ function ContentHub({
     const { contentImages, ...draftPost } = draft;
     draftPost.summary = draft.content.replace(/[#*_>-]/g, "").replace(/\s+/g, " ").trim().slice(0, 180);
     const images = [draft.image, ...contentImages];
+    const pastedVideo = findYoutubeUrl(draft.content);
+    const normalizedPastedVideo = pastedVideo ? normalizeVideoUrl(pastedVideo) : "";
     if (editingId) {
-      setPosts((items) => items.map((post) => post.id === editingId ? { ...post, ...draftPost, images, updatedAt, video: draft.video || undefined } : post));
+      setPosts((items) => items.map((post) => post.id === editingId ? { ...post, ...draftPost, images, updatedAt, video: normalizedPastedVideo || draft.video || undefined, videos: normalizedPastedVideo ? [normalizedPastedVideo] : post.videos } : post));
     } else {
-      setPosts((items) => [{ id: Math.max(0, ...items.map((post) => post.id)) + 1, ...draftPost, images, createdAt: draft.date, updatedAt, video: draft.video || undefined }, ...items]);
+      setPosts((items) => [{ id: Math.max(0, ...items.map((post) => post.id)) + 1, ...draftPost, images, createdAt: draft.date, updatedAt, video: normalizedPastedVideo || draft.video || undefined, videos: normalizedPastedVideo ? [normalizedPastedVideo] : undefined }, ...items]);
     }
     setDraft(emptyDraft);
     setEditingId(null);
@@ -1941,19 +1957,14 @@ function ContentHub({
                 <div className="wide mediaField">
                   <span>{t("Ảnh bìa bài viết", "文章封面圖片")}</span>
                   <input ref={coverUploadRef} className="mediaFileInput" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImageUpload(file, "cover"); event.currentTarget.value = ""; }} />
-                  <div className="mediaControls"><button type="button" onClick={() => coverUploadRef.current?.click()}>▧ {t("Tải ảnh bìa", "上傳封面圖片")}</button>{draft.image && <button type="button" className="removeMedia" onClick={() => setDraft((current) => ({ ...current, image: "" }))}>× {t("Xóa", "移除")}</button>}<small>{t("Tỷ lệ chuẩn 16:9 · tự động căn đầy trên máy tính và điện thoại", "標準比例 16:9 · 桌面與手機自動滿版裁切")}</small></div>
+                  <div className="mediaControls"><button type="button" onClick={() => coverUploadRef.current?.click()}>▧ {t("Tải ảnh bìa", "上傳封面圖片")}</button>{draft.image && <button type="button" className="removeMedia" onClick={() => setDraft((current) => ({ ...current, image: "" }))}>× {t("Xóa", "移除")}</button>}<small>{t("Khuyến nghị 1600 × 900 px (16:9) · JPG/PNG · ảnh luôn hiển thị đầy đủ", "建議 1600 × 900 px（16:9）· JPG/PNG · 圖片會完整顯示")}</small></div>
                   {draft.image && <img className="coverUploadPreview" src={draft.image} alt={t("Xem trước ảnh bìa", "封面預覽")} />}
                 </div>
-                {!editingId && <div className="wide mediaField">
+                <div className="wide mediaField">
                   <span>{t("Hình ảnh trong nội dung", "文章內文圖片")}</span>
                   <input ref={bodyImageUploadRef} className="mediaFileInput" type="file" accept="image/*" multiple onChange={(event) => { [...(event.target.files || [])].forEach((file) => readImageUpload(file, "body")); event.currentTarget.value = ""; }} />
-                  <div className="mediaControls"><button type="button" onClick={() => bodyImageUploadRef.current?.click()}>＋ {t("Thêm ảnh vào nội dung", "新增內文圖片")}</button><small>{t("Ảnh sẽ hiển thị dưới phần nội dung bài viết.", "圖片會顯示在文章文字下方。")}</small></div>
-                  {draft.contentImages.length > 0 && <div className="inlineUploadList">{draft.contentImages.map((image, index) => <figure key={`${image.slice(0, 24)}-${index}`}><img src={image} alt="" /><button type="button" onClick={() => setDraft((current) => ({ ...current, contentImages: current.contentImages.filter((_, itemIndex) => itemIndex !== index) }))}>×</button></figure>)}</div>}
-                </div>}
-                {!editingId && <div className="wide mediaField">
-                  <span>{t("Video trong nội dung", "文章影片")}</span>
-                  <div className="mediaControls"><button type="button" onClick={setVideoFromButton}>▶ {draft.video ? t("Đổi liên kết video", "更換影片連結") : t("Thêm liên kết video", "新增影片連結")}</button>{draft.video && <><small>{t("Đã thêm video", "已加入影片")}</small><button type="button" className="removeMedia" onClick={() => setDraft((current) => ({ ...current, video: "" }))}>× {t("Xóa", "移除")}</button></>}</div>
-                </div>}
+                  <div className="mediaControls"><button type="button" onClick={() => bodyImageUploadRef.current?.click()}>＋ {t("Chọn ảnh", "選擇圖片")}</button><small>{t("Hoặc sao chép ảnh rồi dán trực tiếp vào ô nội dung bên dưới.", "也可以複製圖片，直接貼到下方內文編輯區。")}</small></div>
+                </div>
                 <div className="wide articleComposer">
                   <span>{t("Nội dung bài viết", "文章內容")}</span>
                   <div className="editorToolbar" role="toolbar" aria-label={t("Định dạng nội dung", "內容格式")}>
@@ -1962,8 +1973,10 @@ function ContentHub({
                     <button type="button" title={t("Danh sách", "項目清單")} onClick={() => formatArticleText("- ")}>• {t("Danh sách", "清單")}</button>
                     <button type="button" title={t("Trích dẫn", "引用")} onClick={() => formatArticleText("> ")}>“ ”</button>
                   </div>
-                  <textarea ref={articleTextRef} value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} placeholder={t("Viết nội dung tự nhiên như trong Word…", "像使用 Word 一樣自然編寫內容…")} />
-                  <small>{editingId ? t("Chỉnh nội dung trực tiếp; ảnh và video hiện có được giữ nguyên.", "直接編輯文字；現有圖片與影片會保留。") : t("Ảnh và video đã chọn sẽ tự động hiển thị sau phần nội dung.", "已選圖片與影片會自動顯示於內文之後。")}</small>
+                  <textarea ref={articleTextRef} value={draft.content} onChange={(event) => updateArticleContent(event.target.value)} onPaste={pasteArticleMedia} placeholder={t("Viết như trong Word; dán ảnh hoặc liên kết YouTube trực tiếp tại đây…", "像 Word 一樣編寫；可直接貼上圖片或 YouTube 連結…")} />
+                  <small>{t("Ảnh sao chép sẽ được thêm tự động; liên kết YouTube sẽ trở thành video có thể phát sau khi lưu.", "貼上的圖片會自動加入；YouTube 連結儲存後會顯示為可播放影片。")}</small>
+                  {draft.contentImages.length > 0 && <div className="inlineUploadList composerMediaList">{draft.contentImages.map((image, index) => <figure key={`${image.slice(0, 24)}-${index}`}><img src={image} alt="" /><button type="button" aria-label={t("Xóa ảnh", "移除圖片")} onClick={() => setDraft((current) => ({ ...current, contentImages: current.contentImages.filter((_, itemIndex) => itemIndex !== index) }))}>×</button></figure>)}</div>}
+                  {draft.video && <div className="composerVideoPreview"><iframe src={draft.video} title={t("Xem trước video", "影片預覽")} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>}
                 </div>
               </div>
               <button className="saveContent" disabled={!draft.title.trim() || !draft.content.trim() || !draft.image} onClick={saveDraft}>{t("Lưu & xuất bản", "儲存並發布")}</button>
