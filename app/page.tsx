@@ -1786,12 +1786,14 @@ function ContentHub({
   const [editingId, setEditingId] = useState<number | null>(null);
   const coverUploadRef = useRef<HTMLInputElement | null>(null);
   const bodyImageUploadRef = useRef<HTMLInputElement | null>(null);
+  const articleTextRef = useRef<HTMLTextAreaElement | null>(null);
   const emptyDraft = {
     title: "",
     date: new Date().toLocaleDateString("vi-VN"),
     year: String(new Date().getFullYear()),
     image: "",
     summary: "",
+    content: "",
     video: "",
     contentImages: [] as string[],
   };
@@ -1809,8 +1811,32 @@ function ContentHub({
     });
   const startEdit = (post: BlogPost) => {
     setEditingId(post.id);
-    setDraft({ title: post.title, date: post.date, year: post.year, image: post.image, summary: post.summary, video: post.video || "", contentImages: post.images?.filter((image) => image !== post.image) || [] });
+    setDraft({ title: post.title, date: post.date, year: post.year, image: post.image, summary: post.summary, content: post.content || post.summary, video: post.video || "", contentImages: post.images?.filter((image) => image !== post.image) || [] });
     setShowEditor(true);
+  };
+  const formatArticleText = (before: string, after = "") => {
+    const field = articleTextRef.current;
+    if (!field) return;
+    const start = field.selectionStart;
+    const end = field.selectionEnd;
+    const selected = draft.content.slice(start, end) || t("Nội dung", "內文");
+    const content = `${draft.content.slice(0, start)}${before}${selected}${after}${draft.content.slice(end)}`;
+    setDraft((current) => ({ ...current, content }));
+    requestAnimationFrame(() => {
+      field.focus();
+      field.setSelectionRange(start + before.length, start + before.length + selected.length);
+    });
+  };
+  const renderFormattedText = (value: string) => {
+    const renderBold = (line: string) => line.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+      part.startsWith("**") && part.endsWith("**") ? <strong key={index}>{part.slice(2, -2)}</strong> : part,
+    );
+    return value.split(/\n+/).filter(Boolean).map((line, index) => {
+      if (line.startsWith("## ")) return <h3 key={index}>{renderBold(line.slice(3))}</h3>;
+      if (line.startsWith("- ")) return <ul key={index}><li>{renderBold(line.slice(2))}</li></ul>;
+      if (line.startsWith("> ")) return <blockquote key={index}>{renderBold(line.slice(2))}</blockquote>;
+      return <p key={index}>{renderBold(line)}</p>;
+    });
   };
   const normalizeVideoUrl = (value: string) => {
     const url = value.trim();
@@ -1843,9 +1869,10 @@ function ContentHub({
     if (value !== null) setDraft((current) => ({ ...current, video: normalizeVideoUrl(value) }));
   };
   const saveDraft = () => {
-    if (!draft.title.trim() || !draft.summary.trim() || !draft.image) return;
+    if (!draft.title.trim() || !draft.content.trim() || !draft.image) return;
     const updatedAt = new Date().toLocaleString(lang === "vi" ? "vi-VN" : "zh-TW", { hour12: false });
     const { contentImages, ...draftPost } = draft;
+    draftPost.summary = draft.content.replace(/[#*_>-]/g, "").replace(/\s+/g, " ").trim().slice(0, 180);
     const images = [draft.image, ...contentImages];
     if (editingId) {
       setPosts((items) => items.map((post) => post.id === editingId ? { ...post, ...draftPost, images, updatedAt, video: draft.video || undefined } : post));
@@ -1878,7 +1905,7 @@ function ContentHub({
         <div className="storyPage">
           <section className="storyLead">
             <div className="storyCollage">
-              <img src="https://www.shintung-onspa.com/upload/2022/09/23/1663948034.jpg" alt={t("Nhà máy Shin Tung", "新東公司廠房")} />
+              <img src="/company-factory-clean.png" alt={t("Nhà máy Shin Tung", "新東公司廠房")} />
             </div>
             <article>
               <p className="eyebrow">{t("CÂU CHUYỆN CỦA CHÚNG TÔI", "我們的故事")}</p>
@@ -1914,22 +1941,32 @@ function ContentHub({
                 <div className="wide mediaField">
                   <span>{t("Ảnh bìa bài viết", "文章封面圖片")}</span>
                   <input ref={coverUploadRef} className="mediaFileInput" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImageUpload(file, "cover"); event.currentTarget.value = ""; }} />
-                  <div className="mediaControls"><button type="button" onClick={() => coverUploadRef.current?.click()}>▧ {t("Tải ảnh bìa", "上傳封面圖片")}</button>{draft.image && <button type="button" className="removeMedia" onClick={() => setDraft((current) => ({ ...current, image: "" }))}>× {t("Xóa", "移除")}</button>}</div>
+                  <div className="mediaControls"><button type="button" onClick={() => coverUploadRef.current?.click()}>▧ {t("Tải ảnh bìa", "上傳封面圖片")}</button>{draft.image && <button type="button" className="removeMedia" onClick={() => setDraft((current) => ({ ...current, image: "" }))}>× {t("Xóa", "移除")}</button>}<small>{t("Tỷ lệ chuẩn 16:9 · tự động căn đầy trên máy tính và điện thoại", "標準比例 16:9 · 桌面與手機自動滿版裁切")}</small></div>
                   {draft.image && <img className="coverUploadPreview" src={draft.image} alt={t("Xem trước ảnh bìa", "封面預覽")} />}
                 </div>
-                <div className="wide mediaField">
+                {!editingId && <div className="wide mediaField">
                   <span>{t("Hình ảnh trong nội dung", "文章內文圖片")}</span>
                   <input ref={bodyImageUploadRef} className="mediaFileInput" type="file" accept="image/*" multiple onChange={(event) => { [...(event.target.files || [])].forEach((file) => readImageUpload(file, "body")); event.currentTarget.value = ""; }} />
                   <div className="mediaControls"><button type="button" onClick={() => bodyImageUploadRef.current?.click()}>＋ {t("Thêm ảnh vào nội dung", "新增內文圖片")}</button><small>{t("Ảnh sẽ hiển thị dưới phần nội dung bài viết.", "圖片會顯示在文章文字下方。")}</small></div>
                   {draft.contentImages.length > 0 && <div className="inlineUploadList">{draft.contentImages.map((image, index) => <figure key={`${image.slice(0, 24)}-${index}`}><img src={image} alt="" /><button type="button" onClick={() => setDraft((current) => ({ ...current, contentImages: current.contentImages.filter((_, itemIndex) => itemIndex !== index) }))}>×</button></figure>)}</div>}
-                </div>
-                <div className="wide mediaField">
+                </div>}
+                {!editingId && <div className="wide mediaField">
                   <span>{t("Video trong nội dung", "文章影片")}</span>
                   <div className="mediaControls"><button type="button" onClick={setVideoFromButton}>▶ {draft.video ? t("Đổi liên kết video", "更換影片連結") : t("Thêm liên kết video", "新增影片連結")}</button>{draft.video && <><small>{t("Đã thêm video", "已加入影片")}</small><button type="button" className="removeMedia" onClick={() => setDraft((current) => ({ ...current, video: "" }))}>× {t("Xóa", "移除")}</button></>}</div>
+                </div>}
+                <div className="wide articleComposer">
+                  <span>{t("Nội dung bài viết", "文章內容")}</span>
+                  <div className="editorToolbar" role="toolbar" aria-label={t("Định dạng nội dung", "內容格式")}>
+                    <button type="button" title={t("Tiêu đề", "標題")} onClick={() => formatArticleText("## ")}>H2</button>
+                    <button type="button" title={t("Chữ đậm", "粗體")} onClick={() => formatArticleText("**", "**")}><b>B</b></button>
+                    <button type="button" title={t("Danh sách", "項目清單")} onClick={() => formatArticleText("- ")}>• {t("Danh sách", "清單")}</button>
+                    <button type="button" title={t("Trích dẫn", "引用")} onClick={() => formatArticleText("> ")}>“ ”</button>
+                  </div>
+                  <textarea ref={articleTextRef} value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} placeholder={t("Viết nội dung tự nhiên như trong Word…", "像使用 Word 一樣自然編寫內容…")} />
+                  <small>{editingId ? t("Chỉnh nội dung trực tiếp; ảnh và video hiện có được giữ nguyên.", "直接編輯文字；現有圖片與影片會保留。") : t("Ảnh và video đã chọn sẽ tự động hiển thị sau phần nội dung.", "已選圖片與影片會自動顯示於內文之後。")}</small>
                 </div>
-                <label className="wide"><span>{t("Nội dung tóm tắt", "內容摘要")}</span><textarea value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} /></label>
               </div>
-              <button className="saveContent" disabled={!draft.title.trim() || !draft.summary.trim() || !draft.image} onClick={saveDraft}>{t("Lưu & xuất bản", "儲存並發布")}</button>
+              <button className="saveContent" disabled={!draft.title.trim() || !draft.content.trim() || !draft.image} onClick={saveDraft}>{t("Lưu & xuất bản", "儲存並發布")}</button>
             </section>
           )}
           <div className="newsGrid">
@@ -1953,7 +1990,7 @@ function ContentHub({
 
       {selectedPost && (
         <div className="articleOverlay" role="dialog" aria-modal="true" aria-label={selectedPost.title} onClick={() => setSelectedPost(null)}>
-          <article className="articleViewer" onClick={(event) => event.stopPropagation()}><button className="closeArticle" onClick={() => setSelectedPost(null)}>×</button><img className="articleCover" src={selectedPost.image || "/brand/onspa-logo.png"} alt="" /><div className="articleBody"><small>{selectedPost.date} · {selectedPost.year}</small><h2>{selectedPost.title}</h2><div className="legacyArticleText">{(selectedPost.content || selectedPost.summary).split(/\n{2,}/).filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>{selectedPost.images?.filter((image) => image !== selectedPost.image).map((image, index) => <img className="articleInlineImage" src={image} alt={`${selectedPost.title} ${index + 1}`} key={`${image}-${index}`} />)}{(selectedPost.videos?.length ? selectedPost.videos : selectedPost.video ? [selectedPost.video] : []).map((video, index) => <iframe src={video} title={`${selectedPost.title} ${index + 1}`} key={`${video}-${index}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />)}</div></article>
+          <article className="articleViewer" onClick={(event) => event.stopPropagation()}><button className="closeArticle" onClick={() => setSelectedPost(null)}>×</button><img className="articleCover" src={selectedPost.image || "/brand/onspa-logo.png"} alt="" /><div className="articleBody"><small>{selectedPost.date} · {selectedPost.year}</small><h2>{selectedPost.title}</h2><div className="legacyArticleText">{renderFormattedText(selectedPost.content || selectedPost.summary)}</div>{selectedPost.images?.filter((image) => image !== selectedPost.image).map((image, index) => <img className="articleInlineImage" src={image} alt={`${selectedPost.title} ${index + 1}`} key={`${image}-${index}`} />)}{(selectedPost.videos?.length ? selectedPost.videos : selectedPost.video ? [selectedPost.video] : []).map((video, index) => <iframe src={video} title={`${selectedPost.title} ${index + 1}`} key={`${video}-${index}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />)}</div></article>
         </div>
       )}
       {selectedCertificate && (
