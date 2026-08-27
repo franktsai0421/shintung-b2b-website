@@ -1827,25 +1827,43 @@ function ContentHub({
       field.setSelectionRange(start + before.length, start + before.length + selected.length);
     });
   };
-  const renderFormattedText = (value: string) => {
-    const renderBold = (line: string) => line.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
-      part.startsWith("**") && part.endsWith("**") ? <strong key={index}>{part.slice(2, -2)}</strong> : part,
-    );
-    return value.split(/\n+/).filter(Boolean).map((line, index) => {
-      if (/^https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\//i.test(line.trim())) return null;
-      if (line.startsWith("## ")) return <h3 key={index}>{renderBold(line.slice(3))}</h3>;
-      if (line.startsWith("- ")) return <ul key={index}><li>{renderBold(line.slice(2))}</li></ul>;
-      if (line.startsWith("> ")) return <blockquote key={index}>{renderBold(line.slice(2))}</blockquote>;
-      return <p key={index}>{renderBold(line)}</p>;
-    });
-  };
   const normalizeVideoUrl = (value: string) => {
     const url = value.trim();
     const youtubeId = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([^?&#/]+)/i)?.[1];
     return youtubeId ? `https://www.youtube.com/embed/${youtubeId}` : url;
   };
   const findYoutubeUrl = (value: string) => value.match(/https?:\/\/(?:www\.)?(?:youtu\.be\/[^\s]+|youtube\.com\/(?:watch\?[^\s]*v=|embed\/|shorts\/)[^\s]+)/i)?.[0] || "";
-  const readImageUpload = (file: File, target: "cover" | "body") => {
+  const findYoutubeUrls = (value: string) => value.match(/https?:\/\/(?:www\.)?(?:youtu\.be\/[^\s]+|youtube\.com\/(?:watch\?[^\s]*v=|embed\/|shorts\/)[^\s]+)/gi) || [];
+  const renderArticleContent = (value: string, images: string[] = [], videos: string[] = []) => {
+    const renderBold = (line: string) => line.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+      part.startsWith("**") && part.endsWith("**") ? <strong key={index}>{part.slice(2, -2)}</strong> : part,
+    );
+    const referencedImages = new Set<number>();
+    const inlineVideos = new Set<string>();
+    const content = value.split(/\n+/).filter(Boolean).map((line, index) => {
+      const imageMarker = line.trim().match(/^\[\[IMAGE:(\d+)\]\]$/i);
+      if (imageMarker) {
+        const imageIndex = Number(imageMarker[1]);
+        referencedImages.add(imageIndex);
+        return images[imageIndex] ? <img className="articleInlineImage" src={images[imageIndex]} alt={`${t("Hình nội dung", "內文圖片")} ${imageIndex + 1}`} key={`image-${imageIndex}-${index}`} /> : null;
+      }
+      const youtubeUrl = findYoutubeUrl(line);
+      if (youtubeUrl) {
+        const normalized = normalizeVideoUrl(youtubeUrl);
+        inlineVideos.add(normalized);
+        const surroundingText = line.replace(youtubeUrl, "").trim();
+        return <div className="articleMediaBlock" key={`video-${index}`}>{surroundingText && <p>{renderBold(surroundingText)}</p>}<iframe src={normalized} title={`${t("Video bài viết", "文章影片")} ${index + 1}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>;
+      }
+      if (line.startsWith("## ")) return <h3 key={index}>{renderBold(line.slice(3))}</h3>;
+      if (line.startsWith("- ")) return <ul key={index}><li>{renderBold(line.slice(2))}</li></ul>;
+      if (line.startsWith("> ")) return <blockquote key={index}>{renderBold(line.slice(2))}</blockquote>;
+      return <p key={index}>{renderBold(line)}</p>;
+    });
+    const remainingImages = images.map((image, index) => referencedImages.has(index) ? null : <img className="articleInlineImage" src={image} alt={`${t("Hình nội dung", "內文圖片")} ${index + 1}`} key={`remaining-image-${index}`} />);
+    const remainingVideos = videos.map(normalizeVideoUrl).filter((video) => !inlineVideos.has(video)).map((video, index) => <iframe src={video} title={`${t("Video bài viết", "文章影片")} ${index + 1}`} key={`remaining-video-${video}-${index}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />);
+    return <>{content}{remainingImages}{remainingVideos}</>;
+  };
+  const readImageUpload = (file: File, target: "cover" | "body", insertionPoint?: number) => {
     if (!file.type.startsWith("image/")) return;
     const reader = new FileReader();
     reader.onload = () => {
@@ -1858,9 +1876,14 @@ function ContentHub({
         canvas.height = Math.max(1, Math.round(source.naturalHeight * scale));
         canvas.getContext("2d")?.drawImage(source, 0, 0, canvas.width, canvas.height);
         const image = canvas.toDataURL("image/jpeg", 0.84);
-        setDraft((current) => target === "cover"
-          ? { ...current, image }
-          : { ...current, contentImages: [...current.contentImages, image] });
+        setDraft((current) => {
+          if (target === "cover") return { ...current, image };
+          const imageIndex = current.contentImages.length;
+          const marker = `\n[[IMAGE:${imageIndex}]]\n`;
+          const point = Math.min(insertionPoint ?? current.content.length, current.content.length);
+          const content = `${current.content.slice(0, point)}${marker}${current.content.slice(point)}`;
+          return { ...current, content, contentImages: [...current.contentImages, image] };
+        });
       };
       source.src = String(reader.result);
     };
@@ -1880,20 +1903,29 @@ function ContentHub({
       .filter((file): file is File => Boolean(file?.type.startsWith("image/")));
     if (!imageFiles.length) return;
     event.preventDefault();
-    imageFiles.forEach((file) => readImageUpload(file, "body"));
+    const insertionPoint = event.currentTarget.selectionStart;
+    imageFiles.forEach((file) => readImageUpload(file, "body", insertionPoint));
   };
+  const removeContentImage = (index: number) => setDraft((current) => {
+    const withoutRemoved = current.content.replace(new RegExp(`\\n?\\[\\[IMAGE:${index}\\]\\]\\n?`, "gi"), "\n");
+    const content = withoutRemoved.replace(/\[\[IMAGE:(\d+)\]\]/gi, (marker, value) => {
+      const markerIndex = Number(value);
+      return markerIndex > index ? `[[IMAGE:${markerIndex - 1}]]` : marker;
+    });
+    return { ...current, content, contentImages: current.contentImages.filter((_, itemIndex) => itemIndex !== index) };
+  });
   const saveDraft = () => {
     if (!draft.title.trim() || !draft.content.trim() || !draft.image) return;
     const updatedAt = new Date().toLocaleString(lang === "vi" ? "vi-VN" : "zh-TW", { hour12: false });
     const { contentImages, ...draftPost } = draft;
-    draftPost.summary = draft.content.replace(/[#*_>-]/g, "").replace(/\s+/g, " ").trim().slice(0, 180);
+    draftPost.summary = draft.content.replace(/\[\[IMAGE:\d+\]\]/gi, "").replace(/https?:\/\/\S+/g, "").replace(/[#*_>-]/g, "").replace(/\s+/g, " ").trim().slice(0, 180);
     const images = [draft.image, ...contentImages];
-    const pastedVideo = findYoutubeUrl(draft.content);
-    const normalizedPastedVideo = pastedVideo ? normalizeVideoUrl(pastedVideo) : "";
+    const pastedVideos = findYoutubeUrls(draft.content).map(normalizeVideoUrl);
+    const normalizedPastedVideo = pastedVideos[0] || "";
     if (editingId) {
-      setPosts((items) => items.map((post) => post.id === editingId ? { ...post, ...draftPost, images, updatedAt, video: normalizedPastedVideo || draft.video || undefined, videos: normalizedPastedVideo ? [normalizedPastedVideo] : post.videos } : post));
+      setPosts((items) => items.map((post) => post.id === editingId ? { ...post, ...draftPost, images, updatedAt, video: normalizedPastedVideo || draft.video || undefined, videos: pastedVideos.length ? pastedVideos : post.videos } : post));
     } else {
-      setPosts((items) => [{ id: Math.max(0, ...items.map((post) => post.id)) + 1, ...draftPost, images, createdAt: draft.date, updatedAt, video: normalizedPastedVideo || draft.video || undefined, videos: normalizedPastedVideo ? [normalizedPastedVideo] : undefined }, ...items]);
+      setPosts((items) => [{ id: Math.max(0, ...items.map((post) => post.id)) + 1, ...draftPost, images, createdAt: draft.date, updatedAt, video: normalizedPastedVideo || draft.video || undefined, videos: pastedVideos.length ? pastedVideos : undefined }, ...items]);
     }
     setDraft(emptyDraft);
     setEditingId(null);
@@ -1954,16 +1986,20 @@ function ContentHub({
                 <label><span>{t("Tiêu đề", "標題")}</span><input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
                 <label><span>{t("Ngày", "日期")}</span><input value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label>
                 <label><span>{t("Năm", "年份")}</span><input value={draft.year} onChange={(event) => setDraft({ ...draft, year: event.target.value })} /></label>
-                <div className="wide mediaField">
-                  <span>{t("Ảnh bìa bài viết", "文章封面圖片")}</span>
-                  <input ref={coverUploadRef} className="mediaFileInput" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImageUpload(file, "cover"); event.currentTarget.value = ""; }} />
-                  <div className="mediaControls"><button type="button" onClick={() => coverUploadRef.current?.click()}>▧ {t("Tải ảnh bìa", "上傳封面圖片")}</button>{draft.image && <button type="button" className="removeMedia" onClick={() => setDraft((current) => ({ ...current, image: "" }))}>× {t("Xóa", "移除")}</button>}<small>{t("Khuyến nghị 1600 × 900 px (16:9) · JPG/PNG · ảnh luôn hiển thị đầy đủ", "建議 1600 × 900 px（16:9）· JPG/PNG · 圖片會完整顯示")}</small></div>
-                  {draft.image && <img className="coverUploadPreview" src={draft.image} alt={t("Xem trước ảnh bìa", "封面預覽")} />}
-                </div>
-                <div className="wide mediaField">
-                  <span>{t("Hình ảnh trong nội dung", "文章內文圖片")}</span>
-                  <input ref={bodyImageUploadRef} className="mediaFileInput" type="file" accept="image/*" multiple onChange={(event) => { [...(event.target.files || [])].forEach((file) => readImageUpload(file, "body")); event.currentTarget.value = ""; }} />
-                  <div className="mediaControls"><button type="button" onClick={() => bodyImageUploadRef.current?.click()}>＋ {t("Chọn ảnh", "選擇圖片")}</button><small>{t("Hoặc sao chép ảnh rồi dán trực tiếp vào ô nội dung bên dưới.", "也可以複製圖片，直接貼到下方內文編輯區。")}</small></div>
+                <div className="wide mediaUploadGrid">
+                  <div className="mediaField mediaUploadCard">
+                    <span>{t("Ảnh bìa bài viết", "文章封面圖片")}</span>
+                    <input ref={coverUploadRef} className="mediaFileInput" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImageUpload(file, "cover"); event.currentTarget.value = ""; }} />
+                    <div className="mediaControls"><button type="button" onClick={() => coverUploadRef.current?.click()}>▧ {t("Tải ảnh bìa", "上傳封面")}</button>{draft.image && <button type="button" className="removeMedia" onClick={() => setDraft((current) => ({ ...current, image: "" }))}>× {t("Xóa", "移除")}</button>}</div>
+                    <small>{t("Khuyến nghị 1600 × 900 px (16:9) · ảnh hiển thị đầy đủ", "建議 1600 × 900 px（16:9）· 圖片完整顯示")}</small>
+                    {draft.image && <img className="coverUploadPreview" src={draft.image} alt={t("Xem trước ảnh bìa", "封面預覽")} />}
+                  </div>
+                  <div className="mediaField mediaUploadCard">
+                    <span>{t("Hình ảnh trong nội dung", "文章內文圖片")}</span>
+                    <input ref={bodyImageUploadRef} className="mediaFileInput" type="file" accept="image/*" multiple onChange={(event) => { const point = articleTextRef.current?.selectionStart ?? draft.content.length; [...(event.target.files || [])].forEach((file) => readImageUpload(file, "body", point)); event.currentTarget.value = ""; }} />
+                    <div className="mediaControls"><button type="button" onClick={() => bodyImageUploadRef.current?.click()}>＋ {t("Chèn ảnh tại con trỏ", "在游標位置插入圖片")}</button></div>
+                    <small>{t("Đặt con trỏ trong bài rồi chọn hoặc dán ảnh.", "先在內文指定位置放置游標，再選擇或貼上圖片。")}</small>
+                  </div>
                 </div>
                 <div className="wide articleComposer">
                   <span>{t("Nội dung bài viết", "文章內容")}</span>
@@ -1974,9 +2010,9 @@ function ContentHub({
                     <button type="button" title={t("Trích dẫn", "引用")} onClick={() => formatArticleText("> ")}>“ ”</button>
                   </div>
                   <textarea ref={articleTextRef} value={draft.content} onChange={(event) => updateArticleContent(event.target.value)} onPaste={pasteArticleMedia} placeholder={t("Viết như trong Word; dán ảnh hoặc liên kết YouTube trực tiếp tại đây…", "像 Word 一樣編寫；可直接貼上圖片或 YouTube 連結…")} />
-                  <small>{t("Ảnh sao chép sẽ được thêm tự động; liên kết YouTube sẽ trở thành video có thể phát sau khi lưu.", "貼上的圖片會自動加入；YouTube 連結儲存後會顯示為可播放影片。")}</small>
-                  {draft.contentImages.length > 0 && <div className="inlineUploadList composerMediaList">{draft.contentImages.map((image, index) => <figure key={`${image.slice(0, 24)}-${index}`}><img src={image} alt="" /><button type="button" aria-label={t("Xóa ảnh", "移除圖片")} onClick={() => setDraft((current) => ({ ...current, contentImages: current.contentImages.filter((_, itemIndex) => itemIndex !== index) }))}>×</button></figure>)}</div>}
-                  {draft.video && <div className="composerVideoPreview"><iframe src={draft.video} title={t("Xem trước video", "影片預覽")} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>}
+                  <small>{t("Ảnh và video sẽ xuất hiện đúng vị trí trong bản xem trước bên dưới.", "圖片與影片會在下方預覽中顯示於指定文字位置。")}</small>
+                  {draft.contentImages.length > 0 && <div className="inlineUploadList composerMediaList">{draft.contentImages.map((image, index) => <figure key={`${image.slice(0, 24)}-${index}`}><img src={image} alt="" /><button type="button" aria-label={t("Xóa ảnh", "移除圖片")} onClick={() => removeContentImage(index)}>×</button></figure>)}</div>}
+                  {draft.content.trim() && <section className="articleLayoutPreview"><header><b>{t("Xem trước bố cục", "即時排版預覽")}</b><small>{t("Nội dung sau khi xuất bản", "發布後的文章排列")}</small></header><div>{renderArticleContent(draft.content, draft.contentImages, draft.video ? [draft.video] : [])}</div></section>}
                 </div>
               </div>
               <button className="saveContent" disabled={!draft.title.trim() || !draft.content.trim() || !draft.image} onClick={saveDraft}>{t("Lưu & xuất bản", "儲存並發布")}</button>
@@ -2003,7 +2039,7 @@ function ContentHub({
 
       {selectedPost && (
         <div className="articleOverlay" role="dialog" aria-modal="true" aria-label={selectedPost.title} onClick={() => setSelectedPost(null)}>
-          <article className="articleViewer" onClick={(event) => event.stopPropagation()}><button className="closeArticle" onClick={() => setSelectedPost(null)}>×</button><img className="articleCover" src={selectedPost.image || "/brand/onspa-logo.png"} alt="" /><div className="articleBody"><small>{selectedPost.date} · {selectedPost.year}</small><h2>{selectedPost.title}</h2><div className="legacyArticleText">{renderFormattedText(selectedPost.content || selectedPost.summary)}</div>{selectedPost.images?.filter((image) => image !== selectedPost.image).map((image, index) => <img className="articleInlineImage" src={image} alt={`${selectedPost.title} ${index + 1}`} key={`${image}-${index}`} />)}{(selectedPost.videos?.length ? selectedPost.videos : selectedPost.video ? [selectedPost.video] : []).map((video, index) => <iframe src={video} title={`${selectedPost.title} ${index + 1}`} key={`${video}-${index}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />)}</div></article>
+          <article className="articleViewer" onClick={(event) => event.stopPropagation()}><button className="closeArticle" onClick={() => setSelectedPost(null)}>×</button><img className="articleCover" src={selectedPost.image || "/brand/onspa-logo.png"} alt="" /><div className="articleBody"><small>{selectedPost.date} · {selectedPost.year}</small><h2>{selectedPost.title}</h2><div className="legacyArticleText">{renderArticleContent(selectedPost.content || selectedPost.summary, selectedPost.images?.filter((image) => image !== selectedPost.image) || [], selectedPost.videos?.length ? selectedPost.videos : selectedPost.video ? [selectedPost.video] : [])}</div></div></article>
         </div>
       )}
       {selectedCertificate && (
@@ -2624,10 +2660,9 @@ function Admin({
   return (
     <div className="admin">
       <aside>
-        <div className="logo">
-          <span>TĐ</span>
+        <div className="logo adminCompanyBrand">
           <b>
-            TÂN ĐÔNG
+            SHIN TUNG VIETNAM CO., LTD
             <small>
               {role === "warehouse"
                 ? "WAREHOUSE"
@@ -2683,7 +2718,7 @@ function Admin({
         )}
         <div className="adminHead">
           <div>
-            <p>TÂN ĐÔNG PRO</p>
+            <p>SHIN TUNG VIETNAM CO., LTD · {role === "warehouse" ? "WAREHOUSE" : role === "delivery" ? "DELIVERY" : "ADMIN"}</p>
             <h1>{title[tab]}</h1>
           </div>
           {(tab === "discounts" || tab === "tiers") && (
