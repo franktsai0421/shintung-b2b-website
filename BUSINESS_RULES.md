@@ -76,6 +76,14 @@ The UI currently allows Admin to select a status directly; the arrow sequence de
 
 All new customer-visible labels, validation messages, and status text require both VI and ZH. Product identifiers, numeric values, prices, and order state must not change when language changes.
 
+## Visitor mode
+
+**Implemented, protected:** The public visitor entry does not require login. Visitors may browse the company story, news, quality records, product photographs, product variants, technical specifications, and PCS per carton.
+
+**Implemented, protected:** Visitor mode must not render list prices, customer prices, discount percentages or stages, quantity controls, cart actions, reorder actions, order history, checkout, or any wording that suggests the visitor can place an order. Dealer, Admin, warehouse, and delivery behavior remains unchanged.
+
+**Prototype limitation:** Catalogue pricing still exists in the client-side prototype data. Visitor mode is a presentation and workflow restriction, not server-side protection of the underlying data. Production confidentiality requires server-side authorization and a public catalogue response that excludes price fields.
+
 ## Persistence and authentication
 
 **Implemented, prototype only:** Customer, product, pricing, and order data are initialized in `app/page.tsx` and stored under a versioned browser `localStorage` key. This is device-local and is not ERP or cross-device persistence.
